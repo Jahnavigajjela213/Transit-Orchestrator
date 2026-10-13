@@ -62,6 +62,11 @@ os.environ.update({
     "SEED_WITH_HISTORY": "false",
     "AUDIT_MIRROR": "none",
     "LLM_PROVIDER": "mock",
+    "ASSISTANT_PROVIDER": "mock",
+    # the test database only: never read from or copy to the Databricks workspace configured in .env
+    "READ_SOURCE": "postgres",
+    "DATABRICKS_SYNC": "false",
+    "EMBEDDINGS_ENABLED": "false",
     "ADAPTER_MODE": "mock",
     "PM_SCAN_INTERVAL_SECONDS": "100000",
     "TELEMETRY_STREAM_ENABLED": "false",

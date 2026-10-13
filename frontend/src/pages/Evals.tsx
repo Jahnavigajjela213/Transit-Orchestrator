@@ -10,11 +10,12 @@ interface RunRow {
   id: string; provider: string; model_fast: string; model_smart: string; started_at: string; finished_at: string | null; status: string;
   score_pct: number | null; pass_threshold_pct: number; run_by: string;
   summary: { error?: string; cases?: number; cases_passed?: number; checks?: number; checks_passed?: number; input_tokens?: number;
-    output_tokens?: number; cost_usd?: number; p50_latency_ms?: number; p95_latency_ms?: number };
+    output_tokens?: number; cache_creation_tokens?: number; cache_read_tokens?: number; cost_usd?: number; p50_latency_ms?: number; p95_latency_ms?: number };
 }
 interface CaseResult {
   id: string; task: string; title: string; passed: boolean; checks: { name: string; passed: boolean }[]; output: string;
-  error: string | null; latency_ms: number; input_tokens: number; output_tokens: number; cost_usd: number;
+  error: string | null; latency_ms: number; input_tokens: number; output_tokens: number;
+  cache_creation_tokens?: number; cache_read_tokens?: number; cost_usd: number;
 }
 interface Listing {
   runs: RunRow[]; current: { llm_provider: string; slm_provider: string; model_fast: string; model_smart: string };
@@ -78,18 +79,24 @@ export default function Evals() {
           {data.runs.length === 0 ? <Empty title="No runs yet">Run the suite against the mock first to see the baseline.</Empty> : (
             <div className="overflow-x-auto">
               <table className="table">
-                <thead><tr><th>When</th><th>Provider / models</th><th>Score</th><th>Cases</th><th>Cost</th><th>Latency p50 / p95</th><th>Result</th></tr></thead>
-                <tbody>{data.runs.map((r) => (
+                <thead><tr><th>When</th><th>Provider / models</th><th>Score</th><th>Cases</th><th>Tokens used</th><th>Cache used</th>
+                  <th>Cost</th><th>Latency p50 / p95</th><th>Result</th></tr></thead>
+                <tbody>{data.runs.map((r) => {
+                  const cc = r.summary.cache_creation_tokens ?? 0, cr = r.summary.cache_read_tokens ?? 0;
+                  return (
                   <tr key={r.id} className={`cursor-pointer hover:bg-paper/60 ${openId === r.id ? "bg-route-tint/40" : ""}`} onClick={() => setOpenId(r.id)}>
                     <td className="text-xs">{ago(r.started_at)}<div className="text-2xs text-ink-soft">{r.run_by}</div></td>
                     <td className="text-xs"><div className="font-medium">{r.provider}</div><div className="text-ink-soft">{r.model_fast} / {r.model_smart}</div></td>
                     <td className="tnum font-semibold">{r.score_pct === null ? "—" : `${r.score_pct}%`}<div className="text-2xs font-normal text-ink-soft">pass at {r.pass_threshold_pct}%</div></td>
                     <td className="tnum text-xs">{r.summary.cases_passed ?? 0}/{r.summary.cases ?? 0}</td>
+                    <td className="tnum text-xs">{((r.summary.input_tokens ?? 0) + (r.summary.output_tokens ?? 0)).toLocaleString()}</td>
+                    <td className="tnum text-xs">{cc || cr ? (cc + cr).toLocaleString() : <span className="text-ink-soft">—</span>}</td>
                     <td className="tnum text-xs">${(r.summary.cost_usd ?? 0).toFixed(4)}</td>
                     <td className="tnum text-xs">{r.summary.p50_latency_ms ?? 0} / {r.summary.p95_latency_ms ?? 0} ms</td>
                     <td><StatusBadge status={r.status} /></td>
                   </tr>
-                ))}</tbody>
+                  );
+                })}</tbody>
               </table>
             </div>
           )}
@@ -105,7 +112,9 @@ export default function Evals() {
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <Tag color={c.passed ? "green" : "red"}>{c.passed ? "Pass" : "Fail"}</Tag>
                     <span className="font-medium">{c.title}</span><Tag>{c.task}</Tag>
-                    <span className="text-2xs text-ink-soft tnum">{c.latency_ms} ms, {c.input_tokens + c.output_tokens} tokens</span>
+                    <span className="text-2xs text-ink-soft tnum">{c.latency_ms} ms, {c.input_tokens + c.output_tokens} tokens
+                      {((c.cache_creation_tokens ?? 0) + (c.cache_read_tokens ?? 0)) > 0 &&
+                        ` (cache: ${(c.cache_creation_tokens ?? 0) + (c.cache_read_tokens ?? 0)})`}</span>
                   </div>
                   <ul className="mt-1 grid gap-0.5 text-xs sm:grid-cols-2">
                     {c.checks.map((x) => <li key={x.name} className={x.passed ? "text-go" : "text-stop"}>{x.passed ? "✓" : "✗"} {x.name}</li>)}

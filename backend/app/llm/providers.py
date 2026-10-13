@@ -20,6 +20,8 @@ class LLMResult:
     output_tokens: int
     latency_ms: int
     fallback: bool = False
+    cache_creation_tokens: int = 0
+    cache_read_tokens: int = 0
 
 
 def _parse_json(text: str) -> Optional[dict]:
@@ -196,13 +198,20 @@ class AnthropicProvider(LLMProvider):
     async def complete(self, *, tier, system, prompt, want_json, task, context) -> LLMResult:
         t0 = time.perf_counter()
         model = self.model_for(tier)
+        # Marking the (per-task, reused-across-cases) system prompt cacheable. Anthropic requires a minimum
+        # cacheable block size (1024 tokens for Sonnet, 2048 for Haiku) for a block to actually be cached;
+        # these system prompts are short, so cache_creation/cache_read will read 0 until a task's prompt
+        # grows past that threshold or more static, reused context is added to the cached block.
         resp = await self.client.messages.create(
-            model=model, max_tokens=900, system=system,
+            model=model, max_tokens=900,
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": prompt + ("\n\nRespond with JSON only." if want_json else "")}],
         )
         text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
         return LLMResult(text=text, data=_parse_json(text) if want_json else None, provider=self.name, model=model,
                          input_tokens=resp.usage.input_tokens, output_tokens=resp.usage.output_tokens,
+                         cache_creation_tokens=getattr(resp.usage, "cache_creation_input_tokens", 0) or 0,
+                         cache_read_tokens=getattr(resp.usage, "cache_read_input_tokens", 0) or 0,
                          latency_ms=int((time.perf_counter() - t0) * 1000))
 
 

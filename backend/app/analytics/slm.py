@@ -69,6 +69,7 @@ async def ground(s: AsyncSession, tenant_id: str, question: str) -> dict[str, An
     u = understand(question, routes)
     facts: dict[str, Any] = {
         "question": question, "intent": u["intent"], "agency_history_days": summ["history_days"], "history_runs": summ["history_runs"],
+        "known_routes": routes,
         "otp_30d": summ["otp_30d"], "otp_prior_30d": summ["otp_prior_30d"], "model_version": pm.version,
         "model_holdout_daily_error_pp": pm.metrics.get("holdout_daily_otp_mae_pp"),
         "top_factors": [{"factor": x["label"], "detail": x.get("worst") or x.get("direction")} for x in pm.params.get("importance", [])[:5]],
