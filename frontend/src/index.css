@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #1D2733;
+  --color-ink-soft: #4A5663;
+  --color-ink-faint: #7A8693;
+  --color-paper: #EEF1F3;
+  --color-rule: #D3D9DF;
+  --color-route: #0B6E69;
+  --color-route-dark: #085550;
+  --color-route-tint: #E3F1EF;
+  --color-signal: #C27D00;
+  --color-signal-tint: #FBF0D9;
+  --color-stop: #B8382B;
+  --color-stop-tint: #F8E3E0;
+  --color-go: #2F7D4F;
+  --color-go-tint: #E2F0E7;
+  --color-rail: #22303D;
+  --color-rail-hover: #2C3D4D;
+
+  --font-sign: "Overpass", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Public Sans", "Segoe UI", system-ui, sans-serif;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+}
+
+/* Tailwind v4 compatibility: keep v3 defaults for border color and button cursor. */
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: var(--color-gray-200, currentColor); }
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+}
+
+@layer base {
+  html { @apply bg-paper text-ink font-sans antialiased; font-size: 15px; }
+  h1, h2, h3, h4 { @apply font-sign; }
+  :focus-visible { outline: 2px solid #0B6E69; outline-offset: 2px; }
+  .tnum { font-variant-numeric: tabular-nums; }
+}
+
+@utility btn {
+  @apply inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+@layer components {
+  .panel { @apply bg-white border border-rule rounded-lg; }
+  .btn-primary { @apply btn bg-route text-white hover:bg-route-dark; }
+  .btn-quiet { @apply btn border border-rule bg-white text-ink hover:bg-paper; }
+  .btn-danger { @apply btn border border-stop/40 bg-white text-stop hover:bg-stop-tint; }
+  .input { @apply w-full rounded-sm border border-rule bg-white px-2.5 py-1.5 text-sm focus:border-route focus:outline-hidden; }
+  .label { @apply block text-xs font-medium text-ink-soft mb-1; }
+  .table { @apply w-full text-sm; }
+  .table th { @apply text-left text-xs font-semibold text-ink-soft px-3 py-2 border-b border-rule bg-paper/60 whitespace-nowrap; }
+  .table td { @apply px-3 py-2 border-b border-rule/70 align-top; }
+  .table tr:last-child td { @apply border-b-0; }
+}
+
+/* The one orchestrated motion: the active station on a line map pulses. */
+@keyframes station-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(194, 125, 0, 0.45); }
+  70% { box-shadow: 0 0 0 9px rgba(194, 125, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(194, 125, 0, 0); }
+}
+.station-live { animation: station-pulse 1.8s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .station-live { animation: none; } }
+
+/* Assistant "thinking": three dots rising one after another, like a wave. */
+@keyframes dot-wave {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+.dot-wave { animation: dot-wave 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .dot-wave { animation: none; } }
