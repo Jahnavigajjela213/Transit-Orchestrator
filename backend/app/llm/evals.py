@@ -146,7 +146,12 @@ def _slm_checks(facts: dict) -> list[Check]:
     off_limits = {r for r in all_routes if r not in facts_blob}
     checks.append(("names no route outside the grounded facts", lambda t, d, off=off_limits: not any(name in t for name in off)))
     if facts.get("plan") and not facts["plan"].get("reached"):
-        checks.append(("says plainly that the target is out of reach", lambda t, d: bool(re.search(r"(not reach|short of|cannot|can't|unreachable|not reachable)", t.lower()))))
+        # Allow 0-2 words between "not" and "reach" ("not reachable", "not fully reachable", "not quite
+        # reachable"), and match "short"/"shortfall" as a standalone word rather than only the fixed phrase
+        # "short of" -- a real model answer ("0.24 points short") said the same thing but in reversed word
+        # order, which the original literal-phrase regex missed even though the answer was correct.
+        checks.append(("says plainly that the target is out of reach", lambda t, d: bool(re.search(
+            r"(not\s+(?:\w+\s+){0,2}reach|\bshort(?:fall)?\b|cannot|can't|unreachable)", t.lower()))))
     return checks
 
 
