@@ -45,7 +45,7 @@ function Measure({ label, now, before, unit = "", better = "lower", note }: {
   const hasBefore = before !== null && before !== undefined;
   const improved = has && hasBefore && (better === "lower" ? now! < before! : now! > before!);
   return (
-    <div className="border-b border-rule px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
+    <div className="bg-white px-4 py-3">
       <div className="text-xs text-ink-soft">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className={`font-sign text-2xl font-bold tnum ${improved ? "text-go" : ""}`}>{has ? `${now}${unit}` : "No data yet"}</span>
@@ -65,6 +65,9 @@ const SOURCE_TEXT: Record<string, string> = {
   entered: "baseline entered from Phase 0 discovery", measured_shadow: "baseline saved from shadow mode",
 };
 
+// Tiles separated by 1px rules at any column count: the gaps show the rule colour behind them.
+const TILES = "grid grid-cols-2 gap-px overflow-hidden rounded-b-lg bg-rule";
+
 /** One figure from the products, with an optional warning tone. */
 function Stat({ label, value, sub, tone, to }: { label: string; value: string | number; sub?: string; tone?: "warn" | "bad" | "good"; to?: string }) {
   const color = tone === "bad" ? "text-stop" : tone === "warn" ? "text-signal" : tone === "good" ? "text-go" : "";
@@ -75,7 +78,7 @@ function Stat({ label, value, sub, tone, to }: { label: string; value: string | 
       {sub && <div className="mt-0.5 text-2xs text-ink-faint">{sub}</div>}
     </>
   );
-  const cls = "block border-b border-rule px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0";
+  const cls = "block bg-white px-4 py-3";
   return to ? <Link to={to} className={`${cls} hover:bg-paper/60`}>{body}</Link> : <div className={cls}>{body}</div>;
 }
 
@@ -84,7 +87,7 @@ function OperationsNow({ o }: { o: Operations }) {
   const otp = o.on_time;
   const delta = otp.last_30d !== null && otp.prior_30d !== null ? Math.round((otp.last_30d - otp.prior_30d) * 10) / 10 : null;
   return (
-    <div className="grid sm:grid-cols-4 xl:grid-cols-8">
+    <div className={`${TILES} sm:grid-cols-4 xl:grid-cols-8`}>
       <Stat label="Vehicles in service" value={`${o.vehicles.total - o.vehicles.out_of_service}/${o.vehicles.total}`}
         sub={o.vehicles.out_of_service ? `${o.vehicles.out_of_service} out of service now` : "none out of service"} tone={o.vehicles.out_of_service ? "warn" : "good"} to="/fleet" />
       <Stat label="Open work orders" value={o.work_orders_open.total} sub={pri || "none open"} tone={o.work_orders_open.by_priority.critical ? "bad" : undefined} to="/work-orders" />
@@ -159,7 +162,7 @@ export default function Overview() {
           <span title={m.baseline_notes ?? ""}>{SOURCE_TEXT[m.baseline_source] ?? m.baseline_source}</span>
           {user?.role === "admin" && <button className="text-route hover:underline" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit baseline"}</button>}
         </span>}>
-        <div className="grid sm:grid-cols-3 xl:grid-cols-6">
+        <div className={`${TILES} sm:grid-cols-3 xl:grid-cols-6`}>
           <Measure label="Fault to open work order" now={mm.detect_to_work_order_minutes} before={m.baseline.detect_to_work_order_minutes} unit=" min"
             note={`${mm.detect_to_work_order_samples} orchestration(s), includes approval wait`} />
           <Measure label="Manual re-entry per incident" now={mm.manual_reentries_per_incident} before={m.baseline.manual_reentries_per_incident}
@@ -177,7 +180,7 @@ export default function Overview() {
           onSaved={() => { setEditing(false); reload(); }} />}
       </Section>
 
-      <div className="grid gap-5 xl:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
         <Section title="Ready for more autonomy?">
           {m.autonomy_readiness.length === 0 ? <Empty title="No steps waiting for approval in the policy" /> : (
             <table className="table">
@@ -203,7 +206,7 @@ export default function Overview() {
             </table>
           )}
         </Section>
-        <Section title="Audit log delivery">
+        <Section title="Audit log delivery" className="lg:col-span-2 2xl:col-span-1">
           <div className="grid grid-cols-3 p-4 text-center">
             {([["Delivered", m.audit_mirror.sent, ""], ["Waiting", m.audit_mirror.pending, m.audit_mirror.pending > 50 ? "text-signal" : ""], ["Failed", m.audit_mirror.failed, m.audit_mirror.failed ? "text-stop" : ""]] as [string, number, string][]).map(([k, n, c]) => (
               <div key={k}><div className={`font-sign text-2xl font-bold tnum ${c}`}>{n}</div><div className="text-2xs text-ink-soft">{k}</div></div>
@@ -215,7 +218,7 @@ export default function Overview() {
       </div>
 
       <Section title="No-show recovery" aside={<Link to="/workflows" className="text-xs text-route hover:underline">See orchestrations</Link>}>
-        <div className="grid sm:grid-cols-3 xl:grid-cols-6">
+        <div className={`${TILES} sm:grid-cols-3 xl:grid-cols-6`}>
           <Measure label="No-shows handled" now={m.no_show.finished} note={`${m.no_show.orchestrations} started`} />
           <Measure label="Minutes of service freed" now={m.no_show.minutes_freed} better="higher" />
           <Measure label="Standby riders given a seat" now={m.no_show.standby_riders_booked} better="higher" />
@@ -225,7 +228,7 @@ export default function Overview() {
         </div>
       </Section>
 
-      <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+      <div className="grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
         <Section title="In motion" aside={<Link to="/workflows" className="text-xs text-route hover:underline">All orchestrations</Link>}>
           {!active ? <Loading /> : active.length === 0 ? (
             <Empty title="Nothing in motion">Inject a vehicle fault from the <Link className="text-route underline" to="/simulator">simulator</Link> to watch an orchestration run.</Empty>

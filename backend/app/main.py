@@ -25,6 +25,7 @@ from app.products.workforce.router import router as workforce_router
 from app.simulator import service as simulator
 from app.simulator.router import router as simulator_router
 from app.embeddings.service import embedder
+from app.seed.rolling import roller as schedule_roller
 from app.sync.databricks import sync as databricks_sync
 
 setup_logging()
@@ -89,6 +90,7 @@ async def lifespan(app: FastAPI):
         await seed_database(with_history=settings.seed_with_history)
     await ensure_safety_data()
     await train_missing_models()
+    schedule_roller.start()  # keeps runs on the calendar for yesterday through two days ahead
     simulator.background.start()
     shipper.start()
     databricks_sync.start()
@@ -100,6 +102,7 @@ async def lifespan(app: FastAPI):
     await databricks_sync.stop()
     await shipper.stop()
     await simulator.background.stop()
+    await schedule_roller.stop()
     await bus.stop()
     await orchestrator.stop()
     await database.engine.dispose()

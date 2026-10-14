@@ -53,7 +53,7 @@ export function LevelTag({ level }: { level: string | null | undefined }) {
 export function VehicleId({ label, size = "md" }: { label: string | null; size?: "md" | "lg" }) {
   if (!label) return null;
   return (
-    <span className={`inline-flex items-center rounded-sm bg-ink font-sign font-bold tracking-wide text-white tnum ${size === "lg" ? "px-2.5 py-1 text-lg" : "px-1.5 py-0.5 text-xs"}`}>
+    <span className={`inline-flex items-center whitespace-nowrap rounded-sm bg-ink font-sign font-bold tracking-wide text-white tnum ${size === "lg" ? "px-2.5 py-1 text-lg" : "px-1.5 py-0.5 text-xs"}`}>
       {label}
     </span>
   );

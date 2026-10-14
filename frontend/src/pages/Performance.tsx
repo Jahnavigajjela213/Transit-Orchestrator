@@ -1,11 +1,12 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Bot, Download, RefreshCw, Send } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
 import { dayTime, sentence } from "../lib/format";
 import { useToast } from "../components/Toast";
-import { Empty, ErrorNote, Json, Loading, PageHeader, Section, Tag } from "../components/ui";
+import PerformanceChat from "../components/PerformanceChat";
+import { Empty, ErrorNote, Loading, PageHeader, Section, Tag } from "../components/ui";
 
 interface Group { key: string; otp: number; runs: number; pickups: number; late_pickups: number; avg_late_min: number; recovery_min: number; dwell_min: number; load_factor: number; no_show_rate: number }
 interface Card {
@@ -21,7 +22,6 @@ interface Summary {
 }
 interface Lever { key: string; name: string; detail: string; effort: string; cost_note: string; runs_affected: number; uplift_pp: number; cumulative_otp?: number }
 interface Plan { current_otp: number; target_otp: number; reached: boolean; levers: Lever[]; plan: Lever[]; projected_otp: number; max_with_all_levers: number; model_version: number; baseline_runs: number }
-interface Answer { answer: string; intent: string; facts: Record<string, any>; model: string; provider: string; fallback: boolean }
 
 const pct = (x?: number | null) => (x === null || x === undefined ? "—" : `${x.toFixed(1)}%`);
 const bandName: Record<string, string> = { am_peak: "Morning peak", midday: "Midday", pm_peak: "Afternoon peak" };
@@ -32,9 +32,6 @@ export default function Performance() {
   const { data: s, error, reload } = useData<Summary>("/api/performance/summary");
   const [target, setTarget] = useState<number | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [q, setQ] = useState("");
-  const [answers, setAnswers] = useState<(Answer & { q: string })[]>([]);
-  const [asking, setAsking] = useState(false);
   const [training, setTraining] = useState(false);
 
   useEffect(() => { if (s && target === null) setTarget(Math.round(s.otp_30d) + 3); }, [s, target]);
@@ -43,17 +40,6 @@ export default function Performance() {
     const t = setTimeout(() => api.get<Plan>(`/api/performance/plan?target=${target}`).then(setPlan).catch((e) => toast(e.message, "error")), 250);
     return () => clearTimeout(t);
   }, [target, s?.model?.version, toast]);
-
-  async function ask(question: string, e?: FormEvent) {
-    e?.preventDefault();
-    if (!question.trim()) return;
-    setAsking(true);
-    try {
-      const r = await api.post<Answer>("/api/performance/ask", { question });
-      setAnswers((a) => [{ ...r, q: question }, ...a]);
-      setQ("");
-    } catch (err: any) { toast(err.message, "error"); } finally { setAsking(false); }
-  }
 
   async function retrain() {
     setTraining(true);
@@ -125,30 +111,7 @@ export default function Performance() {
           </div>
         </Section>
 
-        <Section title="Ask the performance assistant" aside={<Tag color={s.slm_provider === "mock" ? "grey" : "teal"}>{s.slm_provider === "ollama" ? "Local SLM" : s.slm_provider === "mock" ? "Built-in composer" : s.slm_provider}</Tag>}>
-          <form onSubmit={(e) => ask(q, e)} className="flex gap-2 p-4 pb-2">
-            <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="How do we move OTP from 92% to 95%?" aria-label="Question" />
-            <button className="btn-primary" disabled={asking} aria-label="Ask"><Send className="h-4 w-4" aria-hidden /></button>
-          </form>
-          <div className="flex flex-wrap gap-1.5 px-4 pb-3">
-            {s.suggested_questions.map((x) => <button key={x} className="rounded-full border border-rule bg-white px-2.5 py-1 text-2xs hover:border-route" onClick={() => ask(x)}>{x}</button>)}
-          </div>
-          {asking && <Loading label="Thinking it through" />}
-          <div className="max-h-[560px] overflow-y-auto">
-            {answers.length === 0 && !asking && <Empty title="Answers come only from your agency's data">Every answer lists the facts it used, so you can check the numbers.</Empty>}
-            {answers.map((a, i) => (
-              <div key={i} className="border-t border-rule px-4 py-3 text-sm">
-                <p className="font-medium">{a.q}</p>
-                <div className="mt-1.5 flex gap-2">
-                  <Bot className="mt-0.5 h-4 w-4 shrink-0 text-route" aria-hidden />
-                  <div className="whitespace-pre-line leading-relaxed">{a.answer}</div>
-                </div>
-                <details className="mt-2 text-xs"><summary className="cursor-pointer text-route">Grounded in ({sentence(a.intent)}, {a.model}{a.fallback ? ", fallback" : ""})</summary>
-                  <div className="mt-1"><Json value={a.facts} /></div></details>
-              </div>
-            ))}
-          </div>
-        </Section>
+        <PerformanceChat provider={s.slm_provider} suggestions={s.suggested_questions} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
@@ -192,13 +155,13 @@ export default function Performance() {
         </div>
       </Section>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-3">
         <SmallTable title="Time of day" rows={s.by_band} name={(k) => bandName[k] ?? k} />
         <SmallTable title="Weather" rows={s.by_weather} name={sentence} />
         <SmallTable title="Operator experience" rows={s.by_tenure} name={sentence} />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         <Section title="Coaching candidates, last 60 days">
           <table className="table">
             <thead><tr><th>Operator</th><th>Experience</th><th>Runs</th><th>OTP</th></tr></thead>
