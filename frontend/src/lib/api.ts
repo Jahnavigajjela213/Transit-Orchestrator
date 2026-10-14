@@ -40,6 +40,7 @@ export const api = {
   get: <T>(p: string) => request<T>("GET", p),
   post: <T>(p: string, b?: unknown) => request<T>("POST", p, b ?? {}),
   put: <T>(p: string, b?: unknown) => request<T>("PUT", p, b ?? {}),
+  del: <T>(p: string) => request<T>("DELETE", p),
   download: async (path: string, filename: string) => {
     const res = await fetch(path, { headers: { Authorization: `Bearer ${tokenStore.get()}` } });
     const blob = await res.blob();

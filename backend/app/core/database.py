@@ -83,7 +83,7 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
         if settings.read_source == "databricks" and (request.method == "GET" or request.url.path in READ_ONLY_POSTS):
             from app.core.hybrid_session import HybridSession
 
-            hybrid = HybridSession(session)
+            hybrid = HybridSession(session, f"{request.method} {request.url.path}")
             try:
                 yield hybrid  # type: ignore[misc]
             finally:

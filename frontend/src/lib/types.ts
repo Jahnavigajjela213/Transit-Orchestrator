@@ -65,6 +65,8 @@ export interface ShadowRec {
   first_human_at: string | null; agreement_pct: number | null; agent_ahead_minutes: number | null;
   verdict: string | null; reviewed_by: string | null; review_note: string | null;
   workflow_title?: string; severity?: string | null; detected_at?: string;
+  comparison: { item: string; agent: string; person: string; score: number | null }[];
+  no_action_at: string | null;  // an open recommendation turns into "no action" at this time
 }
 
 export interface Delegation {

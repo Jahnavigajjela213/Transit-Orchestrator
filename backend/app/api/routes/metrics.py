@@ -18,21 +18,30 @@ from app.policy.engine import policy_engine
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
-# Placeholder until Phase 0: an admin can type the discovery numbers in, or measure them from shadow mode.
-DEFAULT_BASELINE = {"detect_to_work_order_minutes": 190, "manual_reentries_per_incident": 6, "runs_covered_pct": 71,
-                    "audit_complete_pct": 35, "manual_steps_to_return": 3}
-BASELINE_KEYS = tuple(DEFAULT_BASELINE)
-READY_MIN_DECISIONS = 10
+# Phase 0 baseline: how the agency works without the agent. Nothing is made up: it is either entered by an admin from
+# discovery, or measured from shadow-mode incidents that people handled by hand (live, until it is saved). Keys with no
+# data are None and the Overview shows no "before" for them.
+BASELINE_KEYS = ("detect_to_work_order_minutes", "manual_reentries_per_incident", "runs_covered_pct", "audit_complete_pct",
+                 "manual_steps_to_return")
+READY_MIN_DECISIONS = 10  # defaults; a policy can set its own under "readiness"
 READY_MIN_ACCEPTANCE = 90
+
+
+def _empty_baseline() -> dict:
+    return {k: None for k in BASELINE_KEYS}
 
 
 async def baseline_for(s, tenant_id: str) -> dict:
     b = await s.get(TenantBaseline, tenant_id)
-    if not b:
-        return {"values": DEFAULT_BASELINE, "source": "default", "notes": "Synthetic placeholder until the Phase 0 baseline is entered or measured.",
-                "updated_by": None, "updated_at": None}
-    return {"values": {**DEFAULT_BASELINE, **(b.values or {})}, "source": b.source, "notes": b.notes, "updated_by": b.updated_by,
-            "updated_at": b.updated_at}
+    if b:
+        return {"values": {**_empty_baseline(), **(b.values or {})}, "source": b.source, "notes": b.notes, "updated_by": b.updated_by,
+                "updated_at": b.updated_at, "sample": None}
+    measured, sample = await _measure_from_shadow(s, tenant_id)
+    if sample:
+        return {"values": {**_empty_baseline(), **measured}, "source": "shadow_live", "updated_by": None, "updated_at": None, "sample": sample,
+                "notes": f"Measured live from {sample} shadow-mode incident(s) handled by hand."}
+    return {"values": _empty_baseline(), "source": "none", "updated_by": None, "updated_at": None, "sample": 0,
+            "notes": "No baseline yet: enter the Phase 0 numbers, or run in shadow mode and handle a few incidents by hand."}
 
 
 def _manual_entries(w: Workflow) -> list[dict]:
@@ -94,6 +103,8 @@ async def summary(user: CurrentUser, s: SessionDep):
     readiness = []
     for wtype in ("vehicle_health", "no_show_recovery"):
         rules = await policy_engine.rules(s, tid, wtype)
+        need = rules.get("readiness") or {}
+        min_n, min_pct = int(need.get("min_decisions", READY_MIN_DECISIONS)), float(need.get("min_acceptance_pct", READY_MIN_ACCEPTANCE))
         for step, cfg in rules["steps"].items():
             if cfg.get("level") != "semi_autonomous":
                 continue
@@ -102,8 +113,8 @@ async def summary(user: CurrentUser, s: SessionDep):
             ok = sum(1 for x in recent if x[1] == "approved")
             pct = round(100 * ok / n) if n else None
             readiness.append({"workflow_type": wtype, "step": step, "decisions_28d": n, "acceptance_pct": pct,
-                              "ready": n >= READY_MIN_DECISIONS and (pct or 0) >= READY_MIN_ACCEPTANCE,
-                              "rule": f"{READY_MIN_DECISIONS}+ decisions in 28 days with {READY_MIN_ACCEPTANCE}%+ approved unchanged"})
+                              "ready": n >= min_n and (pct or 0) >= min_pct,
+                              "rule": f"{min_n}+ decisions in 28 days with {min_pct:g}%+ approved unchanged"})
     outbox = dict((await s.execute(select(AuditOutbox.status, func.count()).where(AuditOutbox.tenant_id == tid).group_by(AuditOutbox.status))).all())
     live_with_entries = [w for w in wfs if w.status not in ("running", "awaiting_approval")] or wfs
     base = await baseline_for(s, tid)
@@ -118,6 +129,9 @@ async def summary(user: CurrentUser, s: SessionDep):
         status_counts[w.status] = status_counts.get(w.status, 0) + 1
     return {
         "baseline": base["values"], "baseline_source": base["source"], "baseline_updated_at": base["updated_at"],
+        "baseline_notes": base["notes"], "baseline_updated_by": base["updated_by"],
+        "operations": await _operations(s, tid),
+        "generated_at": now(),
         "measures": {
             "detect_to_work_order_minutes": round(sum(mins) / len(mins), 1) if mins else None,
             "detect_to_work_order_samples": len(mins),
@@ -149,6 +163,69 @@ async def get_baseline(user: CurrentUser, s: SessionDep):
     return await baseline_for(s, user.tenant_id)
 
 
+@router.delete("/baseline")
+async def clear_baseline(s: SessionDep, user: User = Depends(require_roles("admin"))):
+    """Forget the saved baseline: the Overview goes back to measuring it live from shadow mode (or showing none)."""
+    b = await s.get(TenantBaseline, user.tenant_id)
+    if b:
+        await s.delete(b)
+        await s.commit()
+    return await baseline_for(s, user.tenant_id)
+
+
+async def _operations(s, tid: str) -> dict:
+    """The agency's operations right now, straight from the product data (Databricks when READ_SOURCE=databricks).
+    One query per product table, so each runs wherever that table lives."""
+    from app.models import (AvailabilityBlock, FleetVehicle, Notification, OpsRunHistory, Run, SafetyDefect, SafetyDriver, Trip,
+                            WorkOrder)
+    from app.products.safety.service import compliance
+
+    t = now()
+    today = t.date()
+    vehicles = dict((await s.execute(select(FleetVehicle.status, func.count()).where(FleetVehicle.tenant_id == tid)
+                                     .group_by(FleetVehicle.status))).all())
+    blocked = (await s.execute(select(func.count(func.distinct(AvailabilityBlock.vehicle_code))).where(
+        AvailabilityBlock.tenant_id == tid, AvailabilityBlock.active.is_(True), AvailabilityBlock.start <= t, AvailabilityBlock.end > t))).scalar_one()
+    wos = (await s.execute(select(WorkOrder.priority, func.count()).where(WorkOrder.tenant_id == tid, WorkOrder.status.in_(["open", "in_progress"]))
+                           .group_by(WorkOrder.priority))).all()
+    defects = (await s.execute(select(func.count(), func.sum(case((SafetyDefect.out_of_service.is_(True), 1), else_=0))).where(
+        SafetyDefect.tenant_id == tid, SafetyDefect.status == "open"))).one()
+    drivers = [compliance(d, today) for d in (await s.execute(select(SafetyDriver).where(SafetyDriver.tenant_id == tid))).scalars()]
+    runs = (await s.execute(select(func.count(), func.sum(case((Run.reassigned.is_(True), 1), else_=0)),
+                                   func.sum(case((Run.delay_minutes > 5, 1), else_=0))).where(
+        Run.tenant_id == tid, Run.service_date == today, Run.status != "cancelled"))).one()
+    day_start = t.replace(hour=0, minute=0, second=0, microsecond=0)
+    trips = dict((await s.execute(select(Trip.status, func.count()).where(
+        Trip.tenant_id == tid, Trip.pickup_time >= day_start, Trip.pickup_time < day_start + timedelta(days=1)).group_by(Trip.status))).all())
+    messages = (await s.execute(select(func.count()).select_from(Notification).where(
+        Notification.tenant_id == tid, Notification.created_at >= t - timedelta(hours=24)))).scalar_one()
+    # on-time performance: last 30 days of history against the 30 before
+    last = (await s.execute(select(func.max(OpsRunHistory.service_date)).where(OpsRunHistory.tenant_id == tid))).scalar_one()
+    otp = {"last_30d": None, "prior_30d": None, "road_calls_30d": None, "no_shows_30d": None, "as_of": last}
+    if last:
+        async def window(days_back: int) -> tuple:
+            hi, lo = last - timedelta(days=days_back), last - timedelta(days=days_back + 29)
+            return (await s.execute(select(func.sum(OpsRunHistory.on_time_pickups), func.sum(OpsRunHistory.completed_trips),
+                                           func.sum(case((OpsRunHistory.road_call.is_(True), 1), else_=0)), func.sum(OpsRunHistory.no_shows))
+                                    .where(OpsRunHistory.tenant_id == tid, OpsRunHistory.service_date >= lo, OpsRunHistory.service_date <= hi))).one()
+        on, done, calls, ns = await window(0)
+        pon, pdone, _, _ = await window(30)
+        otp.update(last_30d=round(100 * on / done, 1) if done else None, prior_30d=round(100 * pon / pdone, 1) if pdone else None,
+                   road_calls_30d=int(calls or 0), no_shows_30d=int(ns or 0))
+    return {
+        "vehicles": {"total": sum(vehicles.values()), "available": vehicles.get("available", 0), "out_of_service": blocked},
+        "work_orders_open": {"total": sum(n for _, n in wos), "by_priority": {p: n for p, n in wos}},
+        "defects_open": {"total": int(defects[0] or 0), "out_of_service": int(defects[1] or 0)},
+        "drivers": {"total": len(drivers), "not_compliant": sum(1 for d in drivers if not d["compliant"]),
+                    "no_wheelchair_runs": sum(1 for d in drivers if d["compliant"] and not d["wheelchair_ok"])},
+        "runs_today": {"total": int(runs[0] or 0), "reassigned": int(runs[1] or 0), "running_late": int(runs[2] or 0)},
+        "trips_today": {"total": sum(trips.values()), "booked": trips.get("booked", 0), "completed": trips.get("completed", 0),
+                        "no_show": trips.get("no_show", 0)},
+        "rider_messages_24h": messages,
+        "on_time": otp,
+    }
+
+
 class BaselineIn(BaseModel):
     values: dict[str, float]
     notes: Optional[str] = None
@@ -169,23 +246,22 @@ async def put_baseline(body: BaselineIn, s: SessionDep, user: User = Depends(req
     return await baseline_for(s, user.tenant_id)
 
 
-@router.post("/baseline/measure")
-async def measure_baseline(s: SessionDep, user: User = Depends(require_roles("admin"))):
-    """Phase 0 baseline measured from shadow mode: what people actually did, by hand, for the same incidents."""
-    rows = (await s.execute(select(Workflow).where(Workflow.tenant_id == user.tenant_id, Workflow.workflow_type == "vehicle_health",
+async def _measure_from_shadow(s, tenant_id: str) -> tuple[dict, int]:
+    """What people did by hand in shadow-mode incidents: the agency's real way of working, measured."""
+    from datetime import datetime as _dt
+
+    rows = (await s.execute(select(Workflow).where(Workflow.tenant_id == tenant_id, Workflow.workflow_type == "vehicle_health",
                                                    Workflow.status == "shadow"))).scalars().all()
     sample = [w for w in rows if _manual_entries(w)]
     if not sample:
-        raise HTTPException(400, "No shadow-mode incidents with manual actions yet. Run in shadow mode and let people handle a few incidents by hand.")
+        return {}, 0
     to_wo = []
     covered, at_risk, returns = 0, 0, []
     for w in sample:
         entries = _manual_entries(w)
         wo = [e for e in entries if e["type"] == "workorder.created"]
-        if wo:
-            from datetime import datetime as _dt
-
-            to_wo.append((_dt.fromisoformat(wo[0]["at"]) - w.detected_at).total_seconds() / 60)
+        if wo and w.detected_at:
+            to_wo.append((_dt.fromisoformat(wo[0]["at"]).replace(tzinfo=None) - w.detected_at).total_seconds() / 60)
         runs = {r["run_id"] for r in ((w.context or {}).get("assessment") or {}).get("runs_at_risk", [])}
         at_risk += len(runs)
         covered += len({e["data"].get("run_id") for e in entries if e["type"] == "run.reassigned"} & runs)
@@ -196,10 +272,19 @@ async def measure_baseline(s: SessionDep, user: User = Depends(require_roles("ad
         measured["detect_to_work_order_minutes"] = round(median(to_wo), 1)
     if at_risk:
         measured["runs_covered_pct"] = round(100 * covered / at_risk)
+    return measured, len(sample)
+
+
+@router.post("/baseline/measure")
+async def measure_baseline(s: SessionDep, user: User = Depends(require_roles("admin"))):
+    """Save the baseline measured from shadow mode, so it stays fixed as the comparison point."""
+    measured, sample = await _measure_from_shadow(s, user.tenant_id)
+    if not sample:
+        raise HTTPException(400, "No shadow-mode incidents with manual actions yet. Run in shadow mode and let people handle a few incidents by hand.")
     b = await s.get(TenantBaseline, user.tenant_id) or TenantBaseline(tenant_id=user.tenant_id, values={})
     b.values = {**(b.values or {}), **measured}
     b.source, b.updated_by, b.updated_at = "measured_shadow", user.full_name, now()
-    b.notes = f"Measured from {len(sample)} shadow-mode incident(s) handled by hand."
+    b.notes = f"Measured from {sample} shadow-mode incident(s) handled by hand."
     s.add(b)
     await s.commit()
-    return {**(await baseline_for(s, user.tenant_id)), "measured": measured, "sample": len(sample)}
+    return {**(await baseline_for(s, user.tenant_id)), "measured": measured, "sample": sample}

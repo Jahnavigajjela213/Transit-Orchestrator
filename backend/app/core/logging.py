@@ -12,6 +12,8 @@ def setup_logging() -> None:
     )
     logging.getLogger("aiosqlite").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    # the Databricks connector logs every HTTP round trip at INFO: keep only its warnings and errors
+    logging.getLogger("databricks").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:

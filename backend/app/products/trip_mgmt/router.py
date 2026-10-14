@@ -89,6 +89,21 @@ async def manual_release(source_ref: str, body: ReleaseIn, user: User = Depends(
         raise HTTPException(400, e.message)
 
 
+@router.post("/vehicles/{vehicle_code}/return")
+async def manual_return(vehicle_code: str, body: ReleaseIn, user: User = Depends(require_roles("dispatcher", "shop_manager"))):
+    """Put a vehicle back on the schedule by hand: releases every active block on it (or just marks it available)."""
+    try:
+        async with product_session() as s:
+            blocks = [b for b in await service.active_blocks(s, user.tenant_id) if b.vehicle_code == vehicle_code]
+            for b in blocks:
+                await service.unblock_vehicle(s, user.tenant_id, b.source_ref, body.reason, by=user.full_name)
+            if not blocks:
+                await service.mark_available_by_hand(s, user.tenant_id, vehicle_code, by=user.full_name)
+            return {"vehicle_code": vehicle_code, "released_blocks": len(blocks)}
+    except ProductAPIError as e:
+        raise HTTPException(400, e.message)
+
+
 class AssignIn(BaseModel):
     vehicle_code: str
     driver_code: str

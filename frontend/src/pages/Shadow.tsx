@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
-import { ago, dayTime, sentence } from "../lib/format";
+import { ago, dayTime, sentence, toLocalInput } from "../lib/format";
 import type { ShadowRec } from "../lib/types";
 import { useToast } from "../components/Toast";
 import { Empty, ErrorNote, Json, Loading, PageHeader, Section, SeverityTag, StatusBadge, Tag, VehicleId } from "../components/ui";
@@ -27,11 +27,100 @@ function describe(r: ShadowRec): string {
   }
 }
 
+function timeLeft(iso: string | null): string {
+  if (!iso) return "";
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return "counts as no action now";
+  const h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3);
+  return `${h ? `${h} h ` : ""}${m} min left before it counts as no action`;
+}
+
+const BY_HAND = ["open_work_order", "pull_vehicle", "reassign_runs", "notify_riders", "return_to_service"];
+
+/** Play the person on shift: do this step by hand in the product, starting from the agent's proposal. */
+function ByHandForm({ r, onDone }: { r: ShadowRec; onDone: () => void }) {
+  const toast = useToast();
+  const x = r.recommendation || {};
+  const [busy, setBusy] = useState(false);
+  const [priority, setPriority] = useState<string>(x.priority ?? "high");
+  const [shopStart, setShopStart] = useState(toLocalInput(x.shop_start));
+  const [shopEnd, setShopEnd] = useState(toLocalInput(x.shop_end));
+  const [from, setFrom] = useState(toLocalInput(x.from));
+  const [until, setUntil] = useState(toLocalInput(x.until));
+  const [message, setMessage] = useState(`Your ride may be delayed: vehicle ${r.vehicle_label} is out of service and a replacement is on its way.`);
+  const plan: any[] = (x.assignments || []).filter((a: any) => a.vehicle_id);
+  const [assign, setAssign] = useState<Record<string, { vehicle_id: string; driver_id: string }>>(
+    () => Object.fromEntries(plan.map((a) => [a.run_id, { vehicle_id: a.vehicle_id, driver_id: a.driver_id }])));
+  const { data: opts } = useData<{ vehicles: { id: string; label: string; type: string; wheelchair: boolean; status: string }[]; drivers: { id: string; label: string }[] }>(
+    r.step === "reassign_runs" ? `/api/shadow/${r.id}/options` : null);
+
+  async function submit() {
+    setBusy(true);
+    const iso = (v: string) => (v ? `${v}:00` : undefined);
+    const body: Record<string, unknown> =
+      r.step === "open_work_order" ? { priority, shop_start: iso(shopStart), shop_end: iso(shopEnd) }
+      : r.step === "pull_vehicle" ? { start: iso(from), end: iso(until) }
+      : r.step === "reassign_runs" ? { assignments: Object.entries(assign).map(([run_id, a]) => ({ run_id, ...a })) }
+      : r.step === "notify_riders" ? { message } : {};
+    try {
+      const res = await api.post<{ done: string[] }>(`/api/shadow/${r.id}/by-hand`, body);
+      toast(res.done.join("; ") || "Done");
+      onDone();
+    } catch (e: any) { toast(e.message, "error"); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="space-y-3 p-3 text-sm">
+      <p className="text-xs text-ink-soft">Do this step <b>by hand in the product</b>, as the person on shift would. The form starts from the agent's proposal: keep it to agree, or change it to see how a different choice scores.</p>
+      {r.step === "open_work_order" && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label><span className="label">Priority</span>
+            <select className="input" value={priority} onChange={(e) => setPriority(e.target.value)}>
+              {["critical", "high", "medium", "low"].map((p) => <option key={p} value={p}>{sentence(p)}{p === x.priority ? " (agent)" : ""}</option>)}
+            </select></label>
+          <label><span className="label">Shop from</span><input type="datetime-local" className="input" value={shopStart} onChange={(e) => setShopStart(e.target.value)} /></label>
+          <label><span className="label">Shop until</span><input type="datetime-local" className="input" value={shopEnd} onChange={(e) => setShopEnd(e.target.value)} /></label>
+        </div>
+      )}
+      {r.step === "pull_vehicle" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label><span className="label">Out of service from</span><input type="datetime-local" className="input" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+          <label><span className="label">Until</span><input type="datetime-local" className="input" value={until} onChange={(e) => setUntil(e.target.value)} /></label>
+        </div>
+      )}
+      {r.step === "reassign_runs" && (plan.length === 0 ? <p className="text-xs text-ink-soft">The agent found no cover to compare against.</p> : !opts ? <Loading /> : (
+        <table className="table">
+          <thead><tr><th>Run</th><th>Agent proposed</th><th>Spare vehicle</th><th>Driver</th></tr></thead>
+          <tbody>{plan.map((a) => (
+            <tr key={a.run_id}>
+              <td className="text-xs">{a.route_name} {a.block_name}<div className="text-2xs text-ink-soft">{a.start_h}{a.needs_wheelchair ? " · wheelchair" : ""}</div></td>
+              <td className="text-xs">{a.vehicle_label} with {a.driver_name}</td>
+              <td><select className="input" value={assign[a.run_id]?.vehicle_id} onChange={(e) => setAssign({ ...assign, [a.run_id]: { ...assign[a.run_id], vehicle_id: e.target.value } })}>
+                {opts.vehicles.map((v) => <option key={v.id} value={v.id}>{v.label}{v.wheelchair ? " ♿" : ""}{v.status !== "available" ? " (out of service)" : ""}{v.id === a.vehicle_id ? " (agent)" : ""}</option>)}
+              </select></td>
+              <td><select className="input" value={assign[a.run_id]?.driver_id} onChange={(e) => setAssign({ ...assign, [a.run_id]: { ...assign[a.run_id], driver_id: e.target.value } })}>
+                {opts.drivers.map((d) => <option key={d.id} value={d.id}>{d.label}{d.id === a.driver_id ? " (agent)" : ""}</option>)}
+              </select></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      ))}
+      {r.step === "notify_riders" && (
+        <label className="block"><span className="label">Message to riders on {x.runs?.length ?? 0} run(s)</span>
+          <textarea className="input" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} /></label>
+      )}
+      {r.step === "return_to_service" && <p className="text-xs">Put {r.vehicle_label} back on the schedule in trip management.</p>}
+      <button className="btn-primary" disabled={busy || (r.step === "reassign_runs" && plan.length === 0)} onClick={submit}>Do it by hand</button>
+    </div>
+  );
+}
+
 export default function Shadow() {
   const { user } = useAuth();
   const toast = useToast();
   const [status, setStatus] = useState("");
   const [open, setOpen] = useState<string | null>(null);
+  const [acting, setActing] = useState<string | null>(null);  // the row whose by-hand form is open
   const { data: summary } = useData<{ steps: StepSummary[]; total: number }>("/api/shadow/summary");
   const { data, error, reload } = useData<ShadowRec[]>(`/api/shadow${status ? `?status=${status}` : ""}`, [status]);
   const { data: pol } = useData<{ rules: any }>("/api/policies/vehicle_health");
@@ -40,6 +129,10 @@ export default function Shadow() {
 
   async function review(id: string, verdict: string) {
     try { await api.post(`/api/shadow/${id}/review`, { verdict }); toast("Review saved"); reload(); } catch (e: any) { toast(e.message, "error"); }
+  }
+
+  async function noAction(id: string) {
+    try { await api.post(`/api/shadow/${id}/no-action`); toast("Closed as no action needed"); reload(); } catch (e: any) { toast(e.message, "error"); }
   }
 
   async function measure() {
@@ -101,20 +194,38 @@ export default function Shadow() {
                   <td className="text-sm">{sentence(r.step)}</td>
                   <td className="max-w-sm text-xs">{describe(r)}</td>
                   <td className="max-w-xs text-xs text-ink-soft">
-                    {r.human_actions.length === 0 ? "Nothing yet" : r.human_actions.map((h) => <div key={h.event_id}>{h.detail}{h.by ? ` (${h.by})` : ""}</div>)}
+                    {r.comparison.length > 0 ? r.comparison.map((c, i) => (
+                      <div key={i} className="mb-1">
+                        {r.comparison.length > 1 && <div className="text-2xs font-semibold text-ink">{c.item}</div>}
+                        <div>Agent: <span className="text-ink">{c.agent}</span></div>
+                        <div>Person: <span className="text-ink">{c.person}</span>{c.score !== null && <span className={`ml-1 tnum font-semibold ${c.score >= 75 ? "text-go" : "text-signal"}`}>{c.score}%</span>}</div>
+                      </div>
+                    )) : r.status === "open" ? (
+                      <><div>Waiting for a person to act</div><div className="text-2xs text-ink-faint">{timeLeft(r.no_action_at)}</div></>
+                    ) : r.status === "no_action" ? (
+                      <div>{r.review_note ?? "Nobody did this step within a day"}{r.reviewed_by && r.review_note ? ` (${r.reviewed_by})` : ""}</div>
+                    ) : "—"}
+                    {r.human_actions.length > 0 && <div className="mt-0.5 text-2xs">{r.human_actions.map((h) => `${h.detail}${h.by ? ` (${h.by})` : ""}`).join("; ")}</div>}
                     {r.agent_ahead_minutes !== null && <div className="mt-0.5 text-2xs text-go">Agent was ready {r.agent_ahead_minutes} min earlier</div>}
                   </td>
                   <td><StatusBadge status={r.status} />{r.agreement_pct !== null && <div className="text-2xs tnum text-ink-soft">{r.agreement_pct}% agreement</div>}</td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    {r.verdict ? <Tag color={r.verdict === "human_better" ? "amber" : "green"}>{r.verdict === "agent_better" ? "Agent better" : r.verdict === "human_better" ? "Person better" : "Same"}</Tag> : canReview && (
+                    {r.status === "open" && canReview && (
+                      <div className="mb-1.5 flex flex-col gap-1">
+                        {BY_HAND.includes(r.step) && <button className="btn-primary px-2 py-0.5 text-2xs" onClick={() => setActing(acting === r.id ? null : r.id)}>{acting === r.id ? "Close form" : "Do it by hand"}</button>}
+                        <button className="btn-quiet px-2 py-0.5 text-2xs" onClick={() => noAction(r.id)}>No action needed</button>
+                      </div>
+                    )}
+                    {r.status !== "open" && (r.verdict ? <Tag color={r.verdict === "human_better" ? "amber" : "green"}>{r.verdict === "agent_better" ? "Agent better" : r.verdict === "human_better" ? "Person better" : "Same"}</Tag> : canReview && (
                       <div className="flex flex-col gap-1">
                         {[["agent_better", "Agent better"], ["same", "Same"], ["human_better", "Person better"]].map(([v, l]) => (
                           <button key={v} className="btn-quiet px-2 py-0.5 text-2xs" onClick={() => review(r.id, v)}>{l}</button>
                         ))}
                       </div>
-                    )}
+                    ))}
                   </td>
                 </tr>
+                {acting === r.id && <tr><td colSpan={7} className="bg-route-tint/30"><ByHandForm r={r} onDone={() => { setActing(null); reload(); }} /></td></tr>}
                 {open === r.id && <tr><td colSpan={7} className="bg-paper/50"><Json value={{ recommendation: r.recommendation, human_actions: r.human_actions, review: { by: r.reviewed_by, note: r.review_note } }} /></td></tr>}
               </Fragment>
             ))}</tbody>

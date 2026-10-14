@@ -13,18 +13,18 @@ export default function Events() {
   const { data: catalog } = useData<{ type: string; source: string; triggers: string | null; description: string }[]>("/api/events/catalog");
 
   return (
-    <div className="space-y-5">
+    <div className="fit-page">
       <PageHeader title="Event stream" intro="Products publish what happened; they don't need to know who is listening. Each event is stored, checked for duplicates, put in event-time order (vehicles with patchy connectivity send late), and handed to the orchestrator. Old signals for problems already fixed are kept as stale, not acted on."
         actions={<button className="btn-quiet" onClick={() => api.download("/api/events/export?since_hours=72", "events.jsonl")}>Export (CloudEvents JSONL)</button>} />
-      <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
-        <div>
+      <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)_14rem] xl:grid-cols-[1fr_340px] xl:grid-rows-[minmax(0,1fr)]">
+        <div className="flex flex-col lg:min-h-0">
           <select className="input mb-3 w-72" value={type} onChange={(e) => setType(e.target.value)} aria-label="Event type">
             <option value="">All event types</option>
             {(catalog || []).map((c) => <option key={c.type} value={c.type}>{c.type}</option>)}
           </select>
           {error && <ErrorNote message={error} />}
           {!data ? <Loading /> : data.length === 0 ? <div className="panel"><Empty title="No events yet" /></div> : (
-            <div className="panel overflow-x-auto">
+            <div className="panel fit-scroll">
               <table className="table">
                 <thead><tr><th>Received</th><th>Type</th><th>Source</th><th>Status</th><th>Detail</th></tr></thead>
                 <tbody>
@@ -49,8 +49,8 @@ export default function Events() {
             </div>
           )}
         </div>
-        <Section title="Event catalog">
-          <ul className="divide-y divide-rule text-sm">
+        <Section title="Event catalog" className="flex flex-col lg:min-h-0">
+          <ul className="divide-y divide-rule text-sm lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
             {(catalog || []).map((c) => (
               <li key={c.type} className="px-4 py-2">
                 <div className="font-medium">{c.type}</div>

@@ -131,6 +131,18 @@ async def unblock_vehicle(s: AsyncSession, tenant_id: str, source_ref: str, reas
     return blk
 
 
+async def mark_available_by_hand(s: AsyncSession, tenant_id: str, code: str, by: str) -> FleetVehicle:
+    """A dispatcher confirms in the schedule that a vehicle with no availability block is back in service."""
+    await check_fault(tenant_id, SYSTEM, "unblock_vehicle")
+    v = await get_vehicle(s, tenant_id, code)
+    v.status = "available"
+    vid = await identity.to_canonical(s, tenant_id, SYSTEM, code)
+    queue_event(s, CloudEvent(type=EventTypes.VEHICLE_AVAILABILITY_CHANGED, source=SYSTEM, subject=vid, tenantid=tenant_id,
+                              data={"vehicle_code": code, "available": True, "reason": "Returned to service by dispatcher",
+                                    "ref": f"manual:{new_id('rts')}", "by": by, "manual": True}))
+    return v
+
+
 async def assign_run(s: AsyncSession, tenant_id: str, run_id: str, vehicle_code: str, driver_code: str, ref: str, by: Optional[str] = None) -> Run:
     await check_fault(tenant_id, SYSTEM, "assign_run")
     run = await get_run(s, tenant_id, run_id)

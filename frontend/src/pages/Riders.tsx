@@ -11,12 +11,12 @@ export default function Riders() {
   const wf = params.get("workflow");
   const { data, error } = useData<N[]>(`/products/rider-comms/notifications${wf ? `?workflow_id=${wf}` : ""}`, [wf]);
   return (
-    <div>
+    <div className="fit-page">
       <PageHeader title="Rider messages" intro="Messages sent through rider communications (TripShot / Passio), in each rider's language and preferred channel." />
       {wf && <p className="mb-3 text-sm">Showing messages for one <Link to={`/workflows/${wf}`} className="text-route underline">orchestration</Link>. <Link to="/riders" className="text-route underline">Show all</Link></p>}
       {error && <ErrorNote message={error} />}
       {!data ? <Loading /> : data.length === 0 ? <div className="panel"><Empty title="No messages sent yet">Riders are notified when the agent reassigns their run.</Empty></div> : (
-        <div className="panel overflow-x-auto">
+        <div className="panel fit-scroll">
           <table className="table">
             <thead><tr><th>Sent</th><th>Rider</th><th>Channel</th><th>Type</th><th>Message</th></tr></thead>
             <tbody>

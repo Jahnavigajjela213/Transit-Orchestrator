@@ -1,16 +1,17 @@
 import re
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.api.serializers import row
 from app.audit import service as audit
 from app.embeddings import service as embeddings
+from app.core.clock import new_id, now
 from app.llm.router import llm
-from app.models import AuditRecord, Workflow
+from app.models import AssistantMessage, AssistantSession, AuditRecord, Workflow
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
@@ -32,7 +33,57 @@ class Turn(BaseModel):
 class AskIn(BaseModel):
     question: str
     workflow_id: Optional[str] = None
-    history: list[Turn] = Field(default_factory=list)  # earlier turns of this conversation, oldest first
+    history: list[Turn] = Field(default_factory=list)  # earlier turns, oldest first (when the chat is not saved)
+    session_id: Optional[str] = None  # a saved chat to continue: its own earlier turns are used as context
+    new_session: bool = False  # start a saved chat with this question
+
+
+async def _own_session(s, user, session_id: str) -> AssistantSession:
+    chat = await s.get(AssistantSession, session_id)
+    if not chat or chat.user_id != user.id:
+        raise HTTPException(404, "That chat no longer exists.")
+    return chat
+
+
+async def _messages(s, session_id: str) -> list[AssistantMessage]:
+    return list((await s.execute(select(AssistantMessage).where(AssistantMessage.session_id == session_id)
+                                 .order_by(AssistantMessage.created_at, AssistantMessage.id))).scalars())
+
+
+def _turns(msgs: list[AssistantMessage]) -> list[Turn]:
+    """Question/answer pairs of a saved chat, oldest first."""
+    return [Turn(question=q.text, answer=a.text, workflow_id=(a.meta or {}).get("workflow_id"))
+            for q, a in zip(msgs, msgs[1:]) if q.role == "you" and a.role == "assistant"]
+
+
+def _message_out(m: AssistantMessage) -> dict:
+    return {"id": m.id, "role": m.role, "text": m.text, "created_at": m.created_at.isoformat(), **(m.meta or {})}
+
+
+# ---------------------------------------------------------------- saved chats
+@router.get("/sessions")
+async def sessions(user: CurrentUser, s: SessionDep):
+    """The signed-in user's chats, most recently used first."""
+    counts = (select(AssistantMessage.session_id, func.count().label("n")).group_by(AssistantMessage.session_id).subquery())
+    rows = (await s.execute(select(AssistantSession, counts.c.n).outerjoin(counts, counts.c.session_id == AssistantSession.id)
+                            .where(AssistantSession.user_id == user.id).order_by(AssistantSession.updated_at.desc()))).all()
+    return [{"id": c.id, "title": c.title, "created_at": c.created_at.isoformat(), "updated_at": c.updated_at.isoformat(),
+             "messages": n or 0} for c, n in rows]
+
+
+@router.get("/sessions/{session_id}")
+async def session_detail(session_id: str, user: CurrentUser, s: SessionDep):
+    chat = await _own_session(s, user, session_id)
+    return {"id": chat.id, "title": chat.title, "messages": [_message_out(m) for m in await _messages(s, chat.id)]}
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str, user: CurrentUser, s: SessionDep):
+    chat = await _own_session(s, user, session_id)
+    await s.execute(delete(AssistantMessage).where(AssistantMessage.session_id == chat.id))
+    await s.delete(chat)
+    await s.commit()
+    return {"deleted": session_id}
 
 
 def _follow_up(question: str) -> bool:
@@ -42,13 +93,29 @@ def _follow_up(question: str) -> bool:
 
 @router.post("/ask")
 async def ask(body: AskIn, user: CurrentUser, s: SessionDep):
+    chat = None
+    history = body.history
+    if body.session_id:
+        chat = await _own_session(s, user, body.session_id)
+        history = _turns(await _messages(s, chat.id))
+    elif body.new_session:
+        title = " ".join(body.question.split())
+        chat = AssistantSession(id=new_id("chat"), tenant_id=user.tenant_id, user_id=user.id,
+                                title=title if len(title) <= 80 else title[:77].rsplit(" ", 1)[0] + "...")
+        s.add(chat)
+        await s.flush()  # the chat row must exist before its first message
+    if chat:  # save the question now, so it is there even if the user leaves the page before the answer arrives
+        chat.updated_at = now()
+        s.add(AssistantMessage(id=new_id("msg"), session_id=chat.id, role="you", text=body.question.strip(), meta={}))
+        await s.commit()
+
     wf = None
     if body.workflow_id:
         wf = await s.get(Workflow, body.workflow_id)
         if wf and wf.tenant_id != user.tenant_id:
             wf = None
     in_flow = wf is not None  # asked from a workflow's page: search only that flow's records
-    history = body.history[-HISTORY_TURNS:]
+    history = history[-HISTORY_TURNS:]
     carried = None  # the workflow an earlier turn was about, when this question follows on from it
     if not wf:
         m = VEHICLE.search(body.question.upper())
@@ -80,7 +147,11 @@ async def ask(body: AskIn, user: CurrentUser, s: SessionDep):
                                                             "retrieved": [{"audit_id": h["audit_id"], "score": h["score"]} for h in hits]},
                        model_used=res.model, outcome="answered", explanation=res.text, input_tokens=res.input_tokens,
                        output_tokens=res.output_tokens)
-    await s.commit()
     # show only the single best match: records of the same incident often score alike, and ties keep the first one
-    return {"answer": res.text, "workflow_id": wf.id if wf else None, "vehicle_label": wf.vehicle_label if wf else None, "model": res.model,
+    meta = {"workflow_id": wf.id if wf else None, "vehicle_label": wf.vehicle_label if wf else None, "model": res.model,
             "sources": hits[:1], "context_turns": len(history), "follows_on_from": carried.vehicle_label if carried else None}
+    if chat:
+        chat.updated_at = now()
+        s.add(AssistantMessage(id=new_id("msg"), session_id=chat.id, role="assistant", text=res.text, meta=meta))
+    await s.commit()
+    return {"answer": res.text, **meta, "session_id": chat.id if chat else None, "session_title": chat.title if chat else None}

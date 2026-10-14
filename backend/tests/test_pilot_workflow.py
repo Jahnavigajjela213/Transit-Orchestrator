@@ -80,6 +80,26 @@ async def test_reject_work_order_stops_workflow(client, dispatcher):
     assert {s["key"]: s["status"] for s in wf["steps"]}["pull_vehicle"] == "not_run"
 
 
+async def test_vehicle_can_be_raised_again_after_rejection(client, dispatcher):
+    """Once a fault is rejected the vehicle is back in play: the same fault, raised again in the same hour, starts a new
+    orchestration instead of being dropped as a repeat. A plain repeat while that one is open is still deduplicated."""
+    await inject(client, dispatcher, "V-112", "C1201")
+    first = await workflow_for(client, dispatcher, "V-112")
+    await decide(client, dispatcher, pending(first)["id"], "reject")
+    fleet = (await client.get("/api/simulator/vehicles", headers=dispatcher)).json()["vehicles"]
+    v = next(x for x in fleet if x["label"] == "V-112")
+    assert v["active_workflow"] is None and v["schedule_status"] == "available"  # listed as a working vehicle
+
+    await inject(client, dispatcher, "V-112", "C1201")
+    second = await workflow_for(client, dispatcher, "V-112")
+    assert second["id"] != first["id"] and second["status"] == "awaiting_approval"
+
+    r = await client.post("/api/simulator/duplicate", json={"vehicle_label": "V-112"}, headers=dispatcher)
+    assert r.status_code == 200, r.text
+    rows = (await client.get("/api/workflows", params={"vehicle": "V-112", "workflow_type": "vehicle_health"}, headers=dispatcher)).json()
+    assert len(rows) == 2  # the duplicate did not start a third
+
+
 async def test_low_severity_is_informational(client, dispatcher):
     await inject(client, dispatcher, "V-111", "P0420")
     wf = await workflow_for(client, dispatcher, "V-111")

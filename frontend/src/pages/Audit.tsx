@@ -19,7 +19,7 @@ export default function Audit() {
   const { data, error } = useData<AuditRecord[]>(`/api/audit?${qs}`, [qs]);
 
   return (
-    <div>
+    <div className="fit-page">
       <PageHeader title="Audit log" intro="Every event, decision, approval and action, with the data considered, the model used and the outcome. Mirrors the Delta table planned for Databricks."
         actions={<>
           <button className="btn-quiet" onClick={() => api.download("/api/audit/export?format=csv", "audit_log.csv")}><Download className="h-4 w-4" aria-hidden /> CSV</button>
@@ -36,7 +36,7 @@ export default function Audit() {
       </div>
       {error && <ErrorNote message={error} />}
       {!data ? <Loading /> : data.length === 0 ? <div className="panel"><Empty title="No records match" /></div> : (
-        <div className="panel overflow-x-auto">
+        <div className="panel fit-scroll">
           <table className="table">
             <thead><tr><th>Time</th><th>Record</th><th>Actor</th><th>Step</th><th>Explanation</th><th>Workflow</th></tr></thead>
             <tbody>

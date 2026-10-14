@@ -12,8 +12,11 @@ import { Empty, ErrorNote, Loading, PageHeader, Section, SeverityTag, StatusBadg
 interface Summary {
   no_show: { orchestrations: number; finished: number; minutes_freed: number; standby_riders_booked: number; pickups_retimed: number;
     late_pickups_avoided: number; riders_notified: number; riders_flagged_for_review: number; recovered_pct: number | null };
-  baseline: Record<string, number>;
-  baseline_source: "default" | "entered" | "measured_shadow"; baseline_updated_at: string | null;
+  baseline: Record<string, number | null>;
+  baseline_source: "none" | "shadow_live" | "entered" | "measured_shadow"; baseline_updated_at: string | null;
+  baseline_notes: string | null; baseline_updated_by: string | null;
+  operations: Operations;
+  generated_at: string;
   measures: Record<string, any>;
   autonomy_readiness: { workflow_type: string; step: string; decisions_28d: number; acceptance_pct: number | null; ready: boolean; rule: string }[];
   shadow: { workflows: number; total: number; steps: { step: string; recommended: number; matched: number; agreement_pct: number | null; ready_to_go_live: boolean }[] };
@@ -24,17 +27,29 @@ interface Summary {
   llm_usage: { provider: string; model: string; calls: number; input_tokens: number; output_tokens: number; cost_usd: number; fallbacks: number }[];
 }
 
+interface Operations {
+  vehicles: { total: number; available: number; out_of_service: number };
+  work_orders_open: { total: number; by_priority: Record<string, number> };
+  defects_open: { total: number; out_of_service: number };
+  drivers: { total: number; not_compliant: number; no_wheelchair_runs: number };
+  runs_today: { total: number; reassigned: number; running_late: number };
+  trips_today: { total: number; booked: number; completed: number; no_show: number };
+  rider_messages_24h: number;
+  on_time: { last_30d: number | null; prior_30d: number | null; road_calls_30d: number | null; no_shows_30d: number | null; as_of: string | null };
+}
+
 function Measure({ label, now, before, unit = "", better = "lower", note }: {
-  label: string; now: number | null | undefined; before?: number; unit?: string; better?: "lower" | "higher"; note?: string;
+  label: string; now: number | null | undefined; before?: number | null; unit?: string; better?: "lower" | "higher"; note?: string;
 }) {
   const has = now !== null && now !== undefined;
-  const improved = has && before !== undefined && (better === "lower" ? now! < before : now! > before);
+  const hasBefore = before !== null && before !== undefined;
+  const improved = has && hasBefore && (better === "lower" ? now! < before! : now! > before!);
   return (
     <div className="border-b border-rule px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
       <div className="text-xs text-ink-soft">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className={`font-sign text-2xl font-bold tnum ${improved ? "text-go" : ""}`}>{has ? `${now}${unit}` : "No data yet"}</span>
-        {before !== undefined && <span className="text-xs text-ink-faint tnum">baseline {before}{unit}</span>}
+        {hasBefore && <span className="text-xs text-ink-faint tnum">baseline {before}{unit}</span>}
       </div>
       {note && <div className="mt-0.5 text-2xs text-ink-faint">{note}</div>}
     </div>
@@ -46,29 +61,71 @@ const BASELINE_LABELS: Record<string, string> = {
   runs_covered_pct: "Affected runs covered (%)", audit_complete_pct: "Decisions with full audit record (%)", manual_steps_to_return: "Manual steps to return a vehicle",
 };
 const SOURCE_TEXT: Record<string, string> = {
-  default: "placeholder baseline, not yet measured", entered: "baseline entered from Phase 0 discovery", measured_shadow: "baseline measured from shadow mode",
+  none: "no baseline yet", shadow_live: "baseline measured live from shadow mode",
+  entered: "baseline entered from Phase 0 discovery", measured_shadow: "baseline saved from shadow mode",
 };
 
-function BaselineEditor({ values, onSaved }: { values: Record<string, number>; onSaved: () => void }) {
+/** One figure from the products, with an optional warning tone. */
+function Stat({ label, value, sub, tone, to }: { label: string; value: string | number; sub?: string; tone?: "warn" | "bad" | "good"; to?: string }) {
+  const color = tone === "bad" ? "text-stop" : tone === "warn" ? "text-signal" : tone === "good" ? "text-go" : "";
+  const body = (
+    <>
+      <div className="text-xs text-ink-soft">{label}</div>
+      <div className={`mt-1 font-sign text-2xl font-bold tnum ${color}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-2xs text-ink-faint">{sub}</div>}
+    </>
+  );
+  const cls = "block border-b border-rule px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0";
+  return to ? <Link to={to} className={`${cls} hover:bg-paper/60`}>{body}</Link> : <div className={cls}>{body}</div>;
+}
+
+function OperationsNow({ o }: { o: Operations }) {
+  const pri = Object.entries(o.work_orders_open.by_priority).map(([p, n]) => `${n} ${p}`).join(", ");
+  const otp = o.on_time;
+  const delta = otp.last_30d !== null && otp.prior_30d !== null ? Math.round((otp.last_30d - otp.prior_30d) * 10) / 10 : null;
+  return (
+    <div className="grid sm:grid-cols-4 xl:grid-cols-8">
+      <Stat label="Vehicles in service" value={`${o.vehicles.total - o.vehicles.out_of_service}/${o.vehicles.total}`}
+        sub={o.vehicles.out_of_service ? `${o.vehicles.out_of_service} out of service now` : "none out of service"} tone={o.vehicles.out_of_service ? "warn" : "good"} to="/fleet" />
+      <Stat label="Open work orders" value={o.work_orders_open.total} sub={pri || "none open"} tone={o.work_orders_open.by_priority.critical ? "bad" : undefined} to="/work-orders" />
+      <Stat label="Open vehicle defects" value={o.defects_open.total} sub={`${o.defects_open.out_of_service} out-of-service defect(s)`} tone={o.defects_open.total ? "warn" : "good"} to="/safety" />
+      <Stat label="Drivers not compliant" value={o.drivers.not_compliant} sub={`of ${o.drivers.total}; ${o.drivers.no_wheelchair_runs} not for wheelchair runs`} tone={o.drivers.not_compliant ? "bad" : "good"} to="/safety" />
+      <Stat label="Runs today" value={o.runs_today.total} sub={`${o.runs_today.reassigned} reassigned, ${o.runs_today.running_late} running late`} tone={o.runs_today.running_late ? "warn" : undefined} to="/schedule" />
+      <Stat label="Trips today" value={o.trips_today.total} sub={`${o.trips_today.booked} booked, ${o.trips_today.completed} done, ${o.trips_today.no_show} no-show`} to="/schedule" />
+      <Stat label="Rider messages, 24 h" value={o.rider_messages_24h} to="/riders" />
+      <Stat label="On-time pickups, 30 d" value={otp.last_30d === null ? "—" : `${otp.last_30d}%`}
+        sub={delta === null ? "no history yet" : `${delta >= 0 ? "+" : ""}${delta} pts vs prior 30 d · ${otp.road_calls_30d} road calls`} tone={delta === null ? undefined : delta >= 0 ? "good" : "bad"} to="/performance" />
+    </div>
+  );
+}
+
+function BaselineEditor({ values, saved, onSaved }: { values: Record<string, number | null>; saved: boolean; onSaved: () => void }) {
   const toast = useToast();
-  const [v, setV] = useState<Record<string, number>>(values);
+  const [v, setV] = useState<Record<string, number | null>>(values);
   const [notes, setNotes] = useState("");
   return (
     <div className="grid gap-3 border-t border-rule p-4 text-sm sm:grid-cols-3">
       {Object.keys(BASELINE_LABELS).map((k) => (
         <label key={k} className="block"><span className="label">{BASELINE_LABELS[k]}</span>
-          <input type="number" min={0} className="input" value={v[k] ?? 0} onChange={(e) => setV({ ...v, [k]: Number(e.target.value) })} /></label>
+          <input type="number" min={0} className="input" value={v[k] ?? ""} placeholder="not known"
+            onChange={(e) => setV({ ...v, [k]: e.target.value === "" ? null : Number(e.target.value) })} /></label>
       ))}
       <label className="block sm:col-span-2"><span className="label">Where these numbers come from</span>
         <input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Phase 0 time study, 3 depots, Nov 2026" /></label>
       <div className="flex items-end gap-2">
         <button className="btn-primary" onClick={async () => {
-          try { await api.put("/api/metrics/baseline", { values: v, notes }); toast("Baseline saved"); onSaved(); } catch (e: any) { toast(e.message, "error"); }
+          const known = Object.fromEntries(Object.entries(v).filter(([, x]) => x !== null && x !== undefined));
+          if (!Object.keys(known).length) { toast("Enter at least one number", "error"); return; }
+          try { await api.put("/api/metrics/baseline", { values: known, notes }); toast("Baseline saved"); onSaved(); } catch (e: any) { toast(e.message, "error"); }
         }}>Save baseline</button>
         <button className="btn-quiet" onClick={async () => {
           try { const r = await api.post<{ sample: number }>("/api/metrics/baseline/measure"); toast(`Measured from ${r.sample} shadow incident(s)`); onSaved(); }
           catch (e: any) { toast(e.message, "error"); }
         }}>Measure from shadow mode</button>
+        {saved && <button className="btn-quiet" onClick={async () => {
+          try { await api.del("/api/metrics/baseline"); toast("Saved baseline cleared: measuring live from shadow mode again"); onSaved(); }
+          catch (e: any) { toast(e.message, "error"); }
+        }}>Clear saved baseline</button>}
       </div>
     </div>
   );
@@ -93,9 +150,13 @@ export default function Overview() {
         <Link to="/attention" className="btn-primary">{m.pending_attention} waiting for you</Link>
       } />
 
+      <Section title="Operations right now" aside={<span className="text-2xs text-ink-soft">From the products · updated {new Date(m.generated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>}>
+        <OperationsNow o={m.operations} />
+      </Section>
+
       <Section title="Vehicle health pilot: success measures" aside={
         <span className="flex items-center gap-2 text-2xs text-ink-soft">
-          {SOURCE_TEXT[m.baseline_source]}
+          <span title={m.baseline_notes ?? ""}>{SOURCE_TEXT[m.baseline_source] ?? m.baseline_source}</span>
           {user?.role === "admin" && <button className="text-route hover:underline" onClick={() => setEditing(!editing)}>{editing ? "Close" : "Edit baseline"}</button>}
         </span>}>
         <div className="grid sm:grid-cols-3 xl:grid-cols-6">
@@ -109,7 +170,11 @@ export default function Overview() {
           <Measure label="Returned to schedule automatically" now={mm.auto_returned_pct} unit="%" better="higher" />
           <Measure label="Orchestrations" now={m.workflows.total} note={Object.entries(m.workflows.by_status).map(([k, v]) => `${v} ${words(k)}`).join(", ")} />
         </div>
-        {editing && <BaselineEditor values={m.baseline} onSaved={() => { setEditing(false); reload(); }} />}
+        {m.baseline_source === "none" && !editing && (
+          <p className="border-t border-rule px-4 py-2 text-2xs text-ink-soft">{m.baseline_notes} <Link to="/shadow" className="text-route underline">Shadow mode</Link></p>
+        )}
+        {editing && <BaselineEditor values={m.baseline} saved={m.baseline_source === "entered" || m.baseline_source === "measured_shadow"}
+          onSaved={() => { setEditing(false); reload(); }} />}
       </Section>
 
       <div className="grid gap-5 xl:grid-cols-3">

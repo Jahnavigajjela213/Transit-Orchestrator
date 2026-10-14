@@ -10,7 +10,7 @@ import asyncio
 import random
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.clock import new_id, now
 from app.core.config import settings
@@ -111,8 +111,15 @@ async def inject_fault(tenant_id: str, vehicle_label: str, fault_code: str) -> d
         device = await identity.to_external(s, tenant_id, vid, "telematics")
         last = (await s.execute(select(TelemetryReading).where(TelemetryReading.device_id == device)
                                 .order_by(TelemetryReading.ts.desc()).limit(1))).scalar_one_or_none()
+        # Orchestrations of this vehicle that have ended (rejected, completed, ...). Part of the dedupe key, so once one
+        # ends the vehicle is back in play: raising the same fault again starts a new orchestration instead of being
+        # dropped as a repeat. "Send the same fault again" keeps the count, so it is still dropped as a duplicate.
+        ended = (await s.execute(select(func.count()).select_from(Workflow).where(
+            Workflow.tenant_id == tenant_id, Workflow.vehicle_id == vid,
+            Workflow.status.notin_(("running", "awaiting_approval", "awaiting_event"))))).scalar_one()
     async with product_session() as s:
-        rec = await tl.ingest_reading(s, tenant_id, tl.synthetic_reading(device, last.odometer if last else 100_000, fault_code))
+        rec = await tl.ingest_reading(s, tenant_id, tl.synthetic_reading(device, last.odometer if last else 100_000, fault_code),
+                                      dedupe_scope=f"ended{ended}")
     return {"vehicle": vehicle_label, "device_id": device, "fault_code": fault_code, "reading_id": rec.id}
 
 

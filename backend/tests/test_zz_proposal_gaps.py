@@ -173,6 +173,58 @@ async def test_baseline_can_be_entered(client, admin, dispatcher):
     r = await client.put("/api/metrics/baseline", json={"values": {"detect_to_work_order_minutes": 240}, "notes": "Discovery workshop"}, headers=admin)
     assert r.status_code == 200 and r.json()["values"]["detect_to_work_order_minutes"] == 240 and r.json()["source"] == "entered"
     assert (await client.put("/api/metrics/baseline", json={"values": {"made_up": 1}}, headers=admin)).status_code == 400
+
+
+async def test_shadow_steps_done_by_hand_from_the_shadow_screen(client, dispatcher, admin):
+    """A tester plays the person on shift from the Shadow mode screen: each by-hand action goes through the product and
+    is matched to the agent's proposal, with a side-by-side comparison; a step can be closed as not needed."""
+    original = await _policy(client, admin)
+    rules = copy.deepcopy(original)
+    rules["mode"] = "shadow"
+    await _put_policy(client, admin, rules)
+    try:
+        await inject(client, dispatcher, "V-121", "BRK-02")
+        wf = await workflow_for(client, dispatcher, "V-121")
+        recs = {r["step"]: r for r in wf["shadow"]}
+        wo = recs["open_work_order"]
+        assert wo["status"] == "open" and wo["no_action_at"] and wo["comparison"] == []
+
+        # a different priority than the agent's: matched loosely, scored 60%
+        other = "high" if wo["recommendation"]["priority"] != "high" else "medium"
+        r = await client.post(f"/api/shadow/{wo['id']}/by-hand", json={"priority": other}, headers=dispatcher)
+        assert r.status_code == 200, r.text
+        await bus.drain()
+        rows = {x["step"]: x for x in (await client.get("/api/shadow", headers=dispatcher)).json() if x["workflow_id"] == wf["id"]}
+        assert rows["open_work_order"]["status"] == "differed" and rows["open_work_order"]["agreement_pct"] == 60
+        c = rows["open_work_order"]["comparison"][0]
+        assert c["agent"] == wo["recommendation"]["priority"] and c["person"] == f"{other} priority" and c["score"] == 60
+
+        # run cover exactly as the agent proposed: 100%
+        plan = [a for a in recs["reassign_runs"]["recommendation"].get("assignments", []) if a.get("vehicle_id")]
+        if plan:
+            opts = (await client.get(f"/api/shadow/{recs['reassign_runs']['id']}/options", headers=dispatcher)).json()
+            assert opts["vehicles"] and opts["drivers"]
+            r = await client.post(f"/api/shadow/{recs['reassign_runs']['id']}/by-hand", headers=dispatcher, json={
+                "assignments": [{"run_id": a["run_id"], "vehicle_id": a["vehicle_id"], "driver_id": a["driver_id"]} for a in plan]})
+            assert r.status_code == 200, r.text
+            await bus.drain()
+            rows = {x["step"]: x for x in (await client.get("/api/shadow", headers=dispatcher)).json() if x["workflow_id"] == wf["id"]}
+            assert rows["reassign_runs"]["status"] == "matched" and rows["reassign_runs"]["agreement_pct"] == 100
+
+        # a step the person decided was not needed
+        r = await client.post(f"/api/shadow/{recs['pull_vehicle']['id']}/no-action", headers=dispatcher)
+        assert r.status_code == 200 and r.json()["status"] == "no_action"
+        assert (await client.post(f"/api/shadow/{recs['pull_vehicle']['id']}/no-action", headers=dispatcher)).status_code == 400
+
+        # Overview: with the saved baseline cleared, it is measured live from these shadow incidents
+        r = await client.delete("/api/metrics/baseline", headers=admin)
+        assert r.status_code == 200 and r.json()["source"] == "shadow_live"
+        m = (await client.get("/api/metrics/summary", headers=dispatcher)).json()
+        assert m["baseline_source"] == "shadow_live" and m["baseline"]["manual_reentries_per_incident"] is not None
+        ops = m["operations"]
+        assert ops["vehicles"]["total"] > 0 and ops["runs_today"]["total"] >= 0 and "on_time" in ops
+    finally:
+        await _put_policy(client, admin, original)
     assert (await client.put("/api/metrics/baseline", json={"values": {"runs_covered_pct": 50}}, headers=dispatcher)).status_code == 403
 
 

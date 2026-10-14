@@ -16,6 +16,40 @@ interface Defect {
   closed_at: string | null; closed_by: string | null; resolution: string | null;
 }
 
+/** Record a vehicle defect by hand in Vestige, as a safety officer or shop manager does today. */
+function DefectForm({ onDone }: { onDone: () => void }) {
+  const toast = useToast();
+  const { data: vehicles } = useData<{ vehicle_code: string; label: string }[]>("/products/trip-mgmt/vehicles");
+  const [vehicle, setVehicle] = useState("");
+  const [category, setCategory] = useState("Brakes");
+  const [severity, setSeverity] = useState("high");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const labels = (vehicles || []).map((v) => v.label).sort();
+  const v = vehicle || labels[0] || "";
+  return (
+    <div className="flex flex-wrap items-end gap-2 border-b border-rule bg-paper/50 p-3 text-sm">
+      <label><span className="label">Vehicle</span>
+        <select className="input w-28" value={v} onChange={(e) => setVehicle(e.target.value)}>{labels.map((l) => <option key={l}>{l}</option>)}</select></label>
+      <label><span className="label">Category</span>
+        <select className="input w-36" value={category} onChange={(e) => setCategory(e.target.value)}>
+          {["Brakes", "Accessibility", "Engine", "Electrical", "Tires", "Body", "Mechanical"].map((c) => <option key={c}>{c}</option>)}</select></label>
+      <label><span className="label">Severity</span>
+        <select className="input w-28" value={severity} onChange={(e) => setSeverity(e.target.value)}>
+          {["critical", "high", "medium", "low"].map((x) => <option key={x} value={x}>{sentence(x)}</option>)}</select></label>
+      <label className="min-w-[14rem] flex-1"><span className="label">What is wrong</span>
+        <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Wheelchair lift stalls halfway" /></label>
+      <button className="btn-primary" disabled={busy || !v} onClick={async () => {
+        setBusy(true);
+        try {
+          const d = await api.post<{ id: string }>("/products/safety/defects", { vehicle_label: v, category, severity, description: description || `${category} defect reported by hand` });
+          toast(`${d.id} recorded for ${v}`); setDescription(""); onDone();
+        } catch (e: any) { toast(e.message, "error"); } finally { setBusy(false); }
+      }}>Record defect</button>
+    </div>
+  );
+}
+
 export default function Safety() {
   const { user } = useAuth();
   const toast = useToast();
@@ -25,6 +59,8 @@ export default function Safety() {
   const { data: defects, reload } = useData<Defect[]>(`/products/safety/defects${defStatus ? `?status=${defStatus}` : ""}`, [defStatus]);
   const rows = (drivers || []).filter((d) => !onlyIssues || !d.compliant || !d.wheelchair_ok);
   const canClose = user?.role === "shop_manager" || user?.role === "admin";
+  const canRecord = canClose || user?.role === "dispatcher";
+  const [recording, setRecording] = useState(false);
 
   async function close(id: string) {
     try { await api.post(`/products/safety/defects/${id}/close`, { resolution: "Repaired and inspected" }); toast(`${id} cleared`); reload(); }
@@ -37,9 +73,13 @@ export default function Safety() {
       {error && <ErrorNote message={error} />}
 
       <Section title="Vehicle defects" aside={
-        <select className="input w-36 py-1 text-xs" value={defStatus} onChange={(e) => setDefStatus(e.target.value)} aria-label="Defect status">
-          <option value="open">Open</option><option value="closed">Cleared</option><option value="">All</option>
-        </select>}>
+        <span className="flex items-center gap-2">
+          {canRecord && <button className="btn-quiet px-2 py-1 text-xs" onClick={() => setRecording(!recording)}>{recording ? "Close" : "Record defect by hand"}</button>}
+          <select className="input w-36 py-1 text-xs" value={defStatus} onChange={(e) => setDefStatus(e.target.value)} aria-label="Defect status">
+            <option value="open">Open</option><option value="closed">Cleared</option><option value="">All</option>
+          </select>
+        </span>}>
+        {recording && <DefectForm onDone={() => { setRecording(false); reload(); }} />}
         {!defects ? <Loading /> : defects.length === 0 ? <Empty title="No defects">Send a brake or wheelchair-lift fault from the simulator to see one recorded.</Empty> : (
           <div className="overflow-x-auto">
             <table className="table">

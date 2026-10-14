@@ -293,3 +293,28 @@ class AuditEmbedding(Base):
     dims: Mapped[int] = mapped_column(Integer)
     embedding: Mapped[list] = mapped_column(JSON)  # normalized vector, so cosine similarity = dot product
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class AssistantSession(Base):
+    """One Assistant conversation of one user, kept so it can be reopened, continued or deleted."""
+
+    __tablename__ = "assistant_sessions"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(40), index=True)
+    user_id: Mapped[str] = mapped_column(String(40), index=True)
+    title: Mapped[str] = mapped_column(String(200))  # the first question, shortened
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+
+
+class AssistantMessage(Base):
+    """A question or an answer in an Assistant conversation. `meta` holds what the answer screen shows next to it
+    (orchestration link, best matching record, context used)."""
+
+    __tablename__ = "assistant_messages"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("assistant_sessions.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(20))  # you | assistant
+    text: Mapped[str] = mapped_column(Text)
+    meta: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)

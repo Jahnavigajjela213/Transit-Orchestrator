@@ -131,6 +131,9 @@ async def on_product_event(event: CloudEvent) -> None:
 
             d["vehicle_id"] = await identity.to_canonical(s, event.tenantid, "trip_mgmt", d.get("vehicle_code") or "")
             d["driver_id"] = await identity.to_canonical(s, event.tenantid, "trip_mgmt", d.get("driver_code") or "")
+            # names, so the Shadow mode screen can put the person's choice next to the agent's
+            d["vehicle_label"] = await identity.label(s, d["vehicle_id"]) if d["vehicle_id"] else d.get("vehicle_code")
+            d["driver_name"] = await identity.label(s, d["driver_id"]) if d["driver_id"] else d.get("driver_code")
         entry = {"event_id": event.id, "type": event.type, "step": step, "by": d.get("by"), "at": event.time.isoformat(),
                  "detail": _describe(event), "data": {k: v for k, v in d.items() if k not in ("message",)}}
         for wf in await _workflows_for(s, event):
@@ -150,7 +153,10 @@ async def on_product_event(event: CloudEvent) -> None:
             hub.publish(wf.tenant_id, "workflow", {"id": wf.id, "manual_entry": event.type})
 
 
-async def expire_unmatched(tenant_id: str, older_than: timedelta = timedelta(hours=24)) -> int:
+NO_ACTION_AFTER = timedelta(hours=24)
+
+
+async def expire_unmatched(tenant_id: str, older_than: timedelta = NO_ACTION_AFTER) -> int:
     """Shadow recommendations nobody acted on within a day: the person decided no action was needed."""
     async with session_scope() as s:
         rows = (await s.execute(select(ShadowRecommendation).where(ShadowRecommendation.tenant_id == tenant_id, ShadowRecommendation.status == "open",
@@ -160,10 +166,43 @@ async def expire_unmatched(tenant_id: str, older_than: timedelta = timedelta(hou
         return len(rows)
 
 
+def comparison(r: ShadowRecommendation) -> list[dict[str, Any]]:
+    """The agent's proposal next to what people did, item by item, with the score each item got."""
+    rec, acts = r.recommendation or {}, r.human_actions or []
+    if not acts:
+        return []
+    if r.step == "open_work_order":
+        wos = [a for a in acts if a["type"] == EventTypes.WORK_ORDER_CREATED]
+        person = wos[0]["data"].get("priority") if wos else None
+        return [{"item": "Work order priority", "agent": rec.get("priority"),
+                 "person": f"{person} priority" if person else "no work order, defect only",
+                 "score": 50.0 if not wos else 100.0 if person == rec.get("priority") else 60.0}]
+    if r.step == "reassign_runs":
+        done = {a["data"].get("run_id"): a["data"] for a in acts}
+        out = []
+        for p in rec.get("assignments", []):
+            if not p.get("vehicle_id"):
+                continue
+            h = done.get(p["run_id"])
+            agent = f"{p.get('vehicle_label')} with {p.get('driver_name')}"
+            if not h:
+                out.append({"item": f"{p.get('route_name')} {p.get('block_name')}", "agent": agent, "person": "not covered by hand", "score": None})
+                continue
+            same_v, same_d = h.get("vehicle_id") == p.get("vehicle_id"), h.get("driver_id") == p.get("driver_id")
+            out.append({"item": f"{p.get('route_name')} {p.get('block_name')}", "agent": agent,
+                        "person": f"{h.get('vehicle_label') or h.get('vehicle_code')} with {h.get('driver_name') or h.get('driver_code')}",
+                        "score": 100.0 if same_v and same_d else 60.0 if same_v or same_d else 20.0})
+        return out
+    return [{"item": "Step done", "agent": "yes", "person": acts[0].get("detail", "yes"), "score": 100.0}]
+
+
 def to_dict(r: ShadowRecommendation, wf: Optional[Workflow] = None) -> dict[str, Any]:
     out = {c.name: getattr(r, c.name) for c in ShadowRecommendation.__table__.columns}
     out["agent_ahead_minutes"] = (round((r.first_human_at - r.recommended_at).total_seconds() / 60, 1)
                                   if r.first_human_at and r.recommended_at else None)
+    out["comparison"] = comparison(r)
+    # an open recommendation counts as "No action" once this passes (see expire_unmatched)
+    out["no_action_at"] = r.recommended_at + NO_ACTION_AFTER if r.status == "open" and r.recommended_at else None
     if wf:
         out.update(workflow_title=wf.title, severity=wf.severity, detected_at=wf.detected_at)
     return out

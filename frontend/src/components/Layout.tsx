@@ -39,11 +39,13 @@ export default function Layout() {
   const nav = useNavigate();
   const { pathname } = useLocation();
   const fullPage = pathname === "/assistant"; // the chat fills the whole content area and scrolls inside itself
+  // Data-heavy pages fit the screen on desktop; their tables scroll inside themselves instead of the whole page.
+  const fitPage = ["/events", "/audit", "/riders", "/schedule", "/fleet"].includes(pathname);
   const { data: pending } = useData<Approval[]>("/api/approvals?status=pending");
   const count = pending?.length ?? 0;
 
   return (
-    <div className={`flex ${fullPage ? "h-screen" : "min-h-screen"}`}>
+    <div className={`flex ${fullPage ? "h-screen" : fitPage ? "min-h-screen lg:h-screen" : "min-h-screen"}`}>
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-rail text-white/80 lg:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <svg viewBox="0 0 40 20" className="h-5 w-10" aria-hidden>
@@ -84,7 +86,7 @@ export default function Layout() {
         </div>
       </aside>
 
-      <div className={`flex min-w-0 flex-1 flex-col ${fullPage ? "min-h-0" : ""}`}>
+      <div className={`flex min-w-0 flex-1 flex-col ${fullPage ? "min-h-0" : fitPage ? "lg:min-h-0" : ""}`}>
         <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-rule bg-white/95 px-5 py-2.5 backdrop-blur">
           <div className="flex items-center gap-2 lg:hidden">
             <select aria-label="Go to page" className="input w-48" onChange={(e) => nav(e.target.value)} value={location.pathname}>
@@ -101,7 +103,9 @@ export default function Layout() {
             </span>
           </div>
         </header>
-        <main className={fullPage ? "flex min-h-0 flex-1 flex-col" : "mx-auto w-full max-w-[1400px] flex-1 px-5 py-6"}>
+        <main className={fullPage ? "flex min-h-0 flex-1 flex-col"
+          : fitPage ? "mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-5 py-6 lg:min-h-0 lg:overflow-y-auto"
+          : "mx-auto w-full max-w-[1400px] flex-1 px-5 py-6"}>
           <Outlet />
         </main>
       </div>

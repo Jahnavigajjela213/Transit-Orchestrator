@@ -63,6 +63,8 @@ os.environ.update({
     "AUDIT_MIRROR": "none",
     "LLM_PROVIDER": "mock",
     "ASSISTANT_PROVIDER": "mock",
+    "SLM_PROVIDER": "mock",
+    "ANTHROPIC_API_KEY": "",  # tests never call a paid model, even when .env has a key
     # the test database only: never read from or copy to the Databricks workspace configured in .env
     "READ_SOURCE": "postgres",
     "DATABRICKS_SYNC": "false",

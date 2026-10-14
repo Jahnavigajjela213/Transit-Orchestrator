@@ -16,13 +16,13 @@ export default function Fleet() {
   const unavailable = (data || []).filter((v) => v.schedule_status !== "available").length;
 
   return (
-    <div>
+    <div className="fit-page">
       <PageHeader title="Fleet" intro="One row per vehicle, joined across asset management, trip management and telematics through the shared identity crosswalk."
         actions={<input className="input w-56" placeholder="Filter by vehicle, type or depot" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Filter fleet" />} />
       {error ? <ErrorNote message={error} /> : !data ? <Loading /> : (
         <>
           <p className="mb-3 text-sm text-ink-soft"><span className="tnum">{data.length}</span> vehicles, <span className="tnum">{unavailable}</span> unavailable now.</p>
-          <div className="panel overflow-x-auto">
+          <div className="panel fit-scroll">
             <table className="table">
               <thead><tr><th>Vehicle</th><th>Type</th><th>Depot</th><th>Schedule</th><th>Runs today</th><th>Maintenance</th><th>Telemetry</th><th>Orchestration</th></tr></thead>
               <tbody>
@@ -80,6 +80,7 @@ function ManualActions({ v }: { v: FleetRow }) {
   const { user } = useAuth();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [priority, setPriority] = useState("high");
   const canWo = user?.role === "dispatcher" || user?.role === "shop_manager" || user?.role === "admin";
   const canPull = user?.role === "dispatcher" || user?.role === "admin";
   if (!canWo && !canPull) return null;
@@ -90,12 +91,20 @@ function ManualActions({ v }: { v: FleetRow }) {
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-rule pt-2 text-xs" onClick={(e) => e.stopPropagation()}>
       <span className="text-ink-soft">Do it by hand in the product (as today, without the agent):</span>
-      {canWo && v.ids.asset_mgmt && <button className="btn-quiet px-2 py-1 text-xs" disabled={busy} onClick={() => run(
-        () => api.post("/products/asset-mgmt/work-orders", { asset_number: v.ids.asset_mgmt, priority: "critical", title: `Fault reported on ${v.label} (opened by hand)` }),
-        `Work order opened by hand for ${v.label}`)}>Open work order in FASTER</button>}
+      {canWo && v.ids.asset_mgmt && <span className="inline-flex items-center gap-1">
+        <select className="input w-28 py-1 text-xs" value={priority} onChange={(e) => setPriority(e.target.value)} aria-label="Work order priority">
+          {["critical", "high", "medium", "low"].map((p) => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
+        </select>
+        <button className="btn-quiet px-2 py-1 text-xs" disabled={busy} onClick={() => run(
+          () => api.post("/products/asset-mgmt/work-orders", { asset_number: v.ids.asset_mgmt, priority, title: `Fault reported on ${v.label} (opened by hand)` }),
+          `${priority[0].toUpperCase() + priority.slice(1)} work order opened by hand for ${v.label}`)}>Open work order in FASTER</button>
+      </span>}
       {canPull && v.ids.trip_mgmt && v.schedule_status === "available" && <button className="btn-quiet px-2 py-1 text-xs" disabled={busy} onClick={() => run(
         () => api.post(`/products/trip-mgmt/vehicles/${v.ids.trip_mgmt}/block`, { end: localIso(Date.now() + 8 * 3600e3), reason: "Pulled by dispatcher" }),
         `${v.label} pulled from the schedule by hand for 8 hours`)}>Pull from schedule (8 h)</button>}
+      {canWo && v.ids.trip_mgmt && v.schedule_status !== "available" && <button className="btn-quiet px-2 py-1 text-xs" disabled={busy} onClick={() => run(
+        () => api.post(`/products/trip-mgmt/vehicles/${v.ids.trip_mgmt}/return`, { reason: "Returned to service by dispatcher" }),
+        `${v.label} returned to the schedule by hand`)}>Return to schedule</button>}
     </div>
   );
 }

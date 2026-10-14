@@ -36,7 +36,8 @@ async def defects(user: CurrentUser, s: SessionDep, status: Optional[str] = None
 
 
 class DefectIn(BaseModel):
-    vehicle_ref: str
+    vehicle_ref: Optional[str] = None  # Vestige's own id, or
+    vehicle_label: Optional[str] = None  # the fleet number people use (P-219)
     category: str
     severity: str = "high"
     description: str = ""
@@ -46,7 +47,16 @@ class DefectIn(BaseModel):
 async def create_defect(body: DefectIn, user: User = Depends(require_roles("shop_manager", "dispatcher"))):
     try:
         async with product_session() as s:
-            return row(await service.open_defect(s, user.tenant_id, created_by=user.full_name, source="manual", **body.model_dump()))
+            ref = body.vehicle_ref
+            if not ref and body.vehicle_label:
+                from app.identity.service import identity
+
+                vid = await identity.by_label(s, user.tenant_id, "vehicle", body.vehicle_label.strip().upper())
+                ref = await identity.to_external(s, user.tenant_id, vid, "safety") if vid else None
+            if not ref:
+                raise HTTPException(400, f"Vehicle {body.vehicle_label or ''} not found in Vestige.")
+            return row(await service.open_defect(s, user.tenant_id, vehicle_ref=ref, category=body.category, severity=body.severity,
+                                                 description=body.description, created_by=user.full_name, source="manual"))
     except ProductAPIError as e:
         raise HTTPException(400, e.message)
 

@@ -43,11 +43,13 @@ def synthetic_reading(device_id: str, odometer: int, dtc: Optional[str] = None) 
     }
 
 
-async def ingest_reading(s: AsyncSession, tenant_id: str, reading: dict, *, duplicate_of: Optional[str] = None) -> TelemetryReading:
+async def ingest_reading(s: AsyncSession, tenant_id: str, reading: dict, *, duplicate_of: Optional[str] = None,
+                         dedupe_scope: Optional[str] = None) -> TelemetryReading:
     """Store a reading. If it carries a DTC, publish vehicle.fault.detected.
 
     The dedupe key (device + code + hour) means a device that keeps repeating the
-    same fault does not start a second workflow.
+    same fault does not start a second workflow. `dedupe_scope` narrows it further: the simulator passes how many
+    orchestrations of the vehicle have ended, so a fault raised again after one was rejected starts a new one.
     """
     rec = TelemetryReading(
         id=new_id("tlr"), tenant_id=tenant_id, device_id=reading["device_id"], ts=now(),
@@ -67,6 +69,6 @@ async def ingest_reading(s: AsyncSession, tenant_id: str, reading: dict, *, dupl
                 "device_id": rec.device_id, "fault_code": code, "description": fc.description if fc else code,
                 "reading": {k: v for k, v in reading.items() if k != "dtc_codes"}, "reading_id": rec.id,
             },
-            dedupekey=f"dtc:{rec.device_id}:{code}:{hour_bucket}",
+            dedupekey=f"dtc:{rec.device_id}:{code}:{hour_bucket}" + (f":{dedupe_scope}" if dedupe_scope else ""),
         ))
     return rec

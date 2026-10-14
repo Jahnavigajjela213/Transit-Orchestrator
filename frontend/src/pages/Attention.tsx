@@ -15,9 +15,11 @@ export default function Attention() {
   const sorted = useMemo(() => {
     const rank: Record<string, number> = { escalation: 0, approval: 1, informational: 2 };
     const sev: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-    return [...(data || [])].sort((a, b) => tab === "pending"
+    // right after a tab switch `data` still holds the other tab's items until the new list arrives: show only this tab's
+    const items = (data || []).filter((a) => (a.status === "pending") === (tab === "pending"));
+    return items.sort((a, b) => tab === "pending"
       ? (rank[a.kind] - rank[b.kind]) || ((sev[a.severity ?? "low"] ?? 4) - (sev[b.severity ?? "low"] ?? 4)) || a.requested_at.localeCompare(b.requested_at)
-      : b.decided_at!.localeCompare(a.decided_at!));
+      : (b.decided_at ?? "").localeCompare(a.decided_at ?? ""));
   }, [data, tab]);
 
   return (

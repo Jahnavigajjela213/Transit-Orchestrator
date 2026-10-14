@@ -77,5 +77,9 @@ async def demo_accounts(s: SessionDep):
     """Only exposed in local mode so the sign-in screen can list the synthetic accounts."""
     if settings.environment != "local":
         return []
-    rows = (await s.execute(select(User, Tenant).join(Tenant, Tenant.id == User.tenant_id).order_by(Tenant.name, User.role))).all()
-    return [{"email": u.email, "full_name": u.full_name, "role": u.role, "tenant_name": t.name, "password": DEMO_PASSWORD} for u, t in rows]
+    # two queries, not a join: with READ_SOURCE=databricks, tenants are read from Databricks and users from Postgres
+    users = (await s.execute(select(User).order_by(User.role))).scalars().all()
+    names = {t.id: t.name for t in (await s.execute(select(Tenant))).scalars()}
+    rows = sorted((u for u in users if u.tenant_id in names), key=lambda u: (names[u.tenant_id], u.role))
+    return [{"email": u.email, "full_name": u.full_name, "role": u.role, "tenant_name": names[u.tenant_id], "password": DEMO_PASSWORD}
+            for u in rows]

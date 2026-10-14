@@ -40,15 +40,24 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
 export const useLive = () => useContext(Ctx);
 
-/** Fetch data and refetch automatically when the server pushes a change. */
+const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
+/** Fetch data and refetch automatically when the server pushes a change.
+ *  A tab in the background does not refetch: it remembers that data changed and refetches once when shown again.
+ *  Refetches never overlap: changes that arrive during a load trigger one more load after it. */
 export function useData<T>(path: string | null, deps: unknown[] = []) {
   const { tick } = useLive();
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const inFlight = useRef(false);
+  const again = useRef(false);  // a change arrived while loading, or while the tab was hidden
+  const latest = useRef<() => Promise<void>>(async () => {});  // the load for the current path and filters
 
   const load = useCallback(async () => {
     if (!path) return;
+    if (inFlight.current) { again.current = true; return; }
+    inFlight.current = true;
     try {
       const d = await api.get<T>(path);
       setData(d);
@@ -58,12 +67,24 @@ export function useData<T>(path: string | null, deps: unknown[] = []) {
       setError(e.message);
     } finally {
       setLoading(false);
+      inFlight.current = false;
+      if (again.current && !hidden()) { again.current = false; latest.current(); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, ...deps]);
+  latest.current = load;
 
-  useEffect(() => { setLoading(true); load(); }, [load]);
-  useEffect(() => { if (tick) load(); }, [tick, load]);
+  useEffect(() => { setLoading(true); load(); }, [load]);  // during another load this queues one more, with the new path
+  useEffect(() => {
+    if (!tick) return;
+    if (hidden()) again.current = true;
+    else load();
+  }, [tick, load]);
+  useEffect(() => {
+    const onShow = () => { if (!hidden() && again.current) { again.current = false; load(); } };
+    document.addEventListener("visibilitychange", onShow);
+    return () => document.removeEventListener("visibilitychange", onShow);
+  }, [load]);
 
   return { data, error, loading, reload: load, setData };
 }

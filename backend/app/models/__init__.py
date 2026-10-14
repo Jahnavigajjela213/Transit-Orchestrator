@@ -2,6 +2,8 @@ from app.models.analytics import OpsRunHistory, PerformanceModel
 from app.models.identity import CanonicalEntity, Crosswalk
 from app.models.platform import (
     ApprovalRequest,
+    AssistantMessage,
+    AssistantSession,
     AuditOutbox,
     AuditEmbedding,
     AuditRecord,
@@ -42,7 +44,7 @@ from app.models.products import (
 
 __all__ = [
     "Tenant", "User", "Policy", "EventRecord", "Workflow", "ApprovalRequest", "AuditRecord",
-    "IdempotencyRecord", "LLMUsage", "FaultInjection", "ShadowRecommendation", "TenantBaseline", "AuditOutbox", "AuditEmbedding", "EvalRun", "DatabricksSyncOutbox", "DatabricksSyncState", "CanonicalEntity", "Crosswalk",
+    "IdempotencyRecord", "LLMUsage", "FaultInjection", "ShadowRecommendation", "TenantBaseline", "AuditOutbox", "AuditEmbedding", "AssistantSession", "AssistantMessage", "EvalRun", "DatabricksSyncOutbox", "DatabricksSyncState", "CanonicalEntity", "Crosswalk",
     "Asset", "WorkOrder", "ShopCapacity", "FaultCode", "FleetVehicle", "AvailabilityBlock",
     "TripDriver", "Run", "Trip", "Employee", "Rider", "Notification", "TelemetryDevice",
     "TelemetryReading", "TripRequest", "NoShowLog", "OpsRunHistory", "PerformanceModel", "SafetyDriver", "SafetyDefect",
