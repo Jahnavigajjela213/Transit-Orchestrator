@@ -14,6 +14,7 @@ import Audit from "./pages/Audit";
 import Policies from "./pages/Policies";
 import Shadow from "./pages/Shadow";
 import Simulate from "./pages/Simulate";
+import Measures from "./pages/Measures";
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -52,6 +53,7 @@ export default function App() {
               <Route path="simulator" element={<ToSimulate tab="fault" />} />
               <Route path="policies" element={<Policies />} />
               <Route path="shadow" element={<Shadow />} />
+              <Route path="measures" element={<Measures />} />
               <Route path="audit" element={<Audit />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

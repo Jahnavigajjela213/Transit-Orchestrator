@@ -9,16 +9,37 @@ from app.core.clock import new_id, now
 from app.core.errors import ProductAPIError
 from app.core.events import CloudEvent, EventTypes
 from app.identity.service import identity
-from app.models import AvailabilityBlock, FleetVehicle, NoShowLog, Run, Trip, TripDriver, TripRequest
+from app.models import AvailabilityBlock, FleetVehicle, NoShowLog, Rider, Run, Trip, TripDriver, TripRequest
 from app.products.common import check_fault, queue_event
 
 SYSTEM = "trip_mgmt"
 
 
+# Messages people read name things the way a dispatcher does: vehicle number, route and block with its time, driver and
+# rider names. Internal codes (TM-…, RUN-…, trp_…) stay out of them.
+def run_name(r: Run) -> str:
+    return f"{r.route_name} {r.block_name} ({r.start_time:%a %d %b %H:%M})"
+
+
+async def vehicle_name(s: AsyncSession, code: str) -> str:
+    v = await s.get(FleetVehicle, code)
+    return v.label if v else "the vehicle"
+
+
+async def driver_name(s: AsyncSession, code: str) -> str:
+    d = await s.get(TripDriver, code)
+    return d.name if d else "the driver"
+
+
+async def trip_name(s: AsyncSession, t: Trip) -> str:
+    rider = await s.get(Rider, t.rider_id)
+    return f"{rider.name if rider else 'the rider'}'s {t.pickup_time:%H:%M} pickup"
+
+
 async def get_vehicle(s: AsyncSession, tenant_id: str, code: str) -> FleetVehicle:
     v = await s.get(FleetVehicle, code)
     if not v or v.tenant_id != tenant_id:
-        raise ProductAPIError(SYSTEM, "get_vehicle", f"Vehicle {code} not found")
+        raise ProductAPIError(SYSTEM, "get_vehicle", "That vehicle is not in trip management")
     return v
 
 
@@ -33,7 +54,7 @@ async def list_drivers(s: AsyncSession, tenant_id: str) -> list[TripDriver]:
 async def get_run(s: AsyncSession, tenant_id: str, run_id: str) -> Run:
     r = await s.get(Run, run_id)
     if not r or r.tenant_id != tenant_id:
-        raise ProductAPIError(SYSTEM, "get_run", f"Run {run_id} not found")
+        raise ProductAPIError(SYSTEM, "get_run", "That run is not in trip management")
     return r
 
 
@@ -72,7 +93,7 @@ async def vehicle_is_free(s: AsyncSession, tenant_id: str, code: str, start: dat
         return False, f"blocked: {blocks[0].reason}"
     clash = [r for r in await runs_for_vehicle_between(s, tenant_id, code, start, end) if r.id != ignore_run]
     if clash:
-        return False, f"already on {clash[0].route_name} ({clash[0].block_name})"
+        return False, f"already on {run_name(clash[0])}"
     return True, "free"
 
 
@@ -150,11 +171,11 @@ async def assign_run(s: AsyncSession, tenant_id: str, run_id: str, vehicle_code:
         return run  # idempotent replay
     free, why = await vehicle_is_free(s, tenant_id, vehicle_code, run.start_time, run.end_time, ignore_run=run.id)
     if not free:
-        raise ProductAPIError(SYSTEM, "assign_run", f"{vehicle_code} is not available for {run.id}: {why}")
+        raise ProductAPIError(SYSTEM, "assign_run", f"{await vehicle_name(s, vehicle_code)} is not free for {run_name(run)}: it is {why}")
     if driver_code != run.driver_code:
         clash = [r for r in await driver_runs_between(s, tenant_id, driver_code, run.start_time, run.end_time) if r.id != run.id]
         if clash:
-            raise ProductAPIError(SYSTEM, "assign_run", f"Driver {driver_code} already works {clash[0].id}")
+            raise ProductAPIError(SYSTEM, "assign_run", f"{await driver_name(s, driver_code)} already drives {run_name(clash[0])}")
     if not run.reassigned:
         run.original_vehicle_code = run.vehicle_code
         run.original_driver_code = run.driver_code
@@ -189,7 +210,7 @@ async def trips_for_runs(s: AsyncSession, tenant_id: str, run_ids: list[str]) ->
 async def update_trip_eta(s: AsyncSession, tenant_id: str, trip_id: str, eta: datetime) -> Trip:
     t = await s.get(Trip, trip_id)
     if not t or t.tenant_id != tenant_id:
-        raise ProductAPIError(SYSTEM, "update_trip_eta", f"Trip {trip_id} not found")
+        raise ProductAPIError(SYSTEM, "update_trip_eta", "That pickup is not in trip management")
     t.eta = eta
     return t
 
@@ -197,7 +218,7 @@ async def update_trip_eta(s: AsyncSession, tenant_id: str, trip_id: str, eta: da
 async def get_trip(s: AsyncSession, tenant_id: str, trip_id: str) -> Trip:
     t = await s.get(Trip, trip_id)
     if not t or t.tenant_id != tenant_id:
-        raise ProductAPIError(SYSTEM, "get_trip", f"Trip {trip_id} not found")
+        raise ProductAPIError(SYSTEM, "get_trip", "That pickup is not in trip management")
     return t
 
 
@@ -210,7 +231,7 @@ async def mark_no_show(s: AsyncSession, tenant_id: str, trip_id: str, kind: str 
     """Driver records a no-show, or the rider cancels late. Publishes trip.no_show / trip.cancelled."""
     t = await get_trip(s, tenant_id, trip_id)
     if t.status != "booked":
-        raise ProductAPIError(SYSTEM, "mark_no_show", f"Trip {trip_id} is {t.status}, not booked")
+        raise ProductAPIError(SYSTEM, "mark_no_show", f"{(await trip_name(s, t)).capitalize()} is {t.status.replace('_', ' ')}, not booked")
     t.status = "no_show" if kind == "no_show" else "cancelled"
     run = await get_run(s, tenant_id, t.run_id)
     s.add(NoShowLog(id=new_id("nsl"), tenant_id=tenant_id, rider_id=t.rider_id, trip_id=t.id, service_date=run.service_date, kind=kind))
@@ -249,16 +270,16 @@ async def book_request(s: AsyncSession, tenant_id: str, request_id: str, run_id:
     await check_fault(tenant_id, SYSTEM, "book_request")
     req = await s.get(TripRequest, request_id)
     if not req or req.tenant_id != tenant_id:
-        raise ProductAPIError(SYSTEM, "book_request", f"Request {request_id} not found")
+        raise ProductAPIError(SYSTEM, "book_request", "That standby request is not in trip management")
     if req.status == "booked" and req.booked_trip_id:
         return await get_trip(s, tenant_id, req.booked_trip_id)  # idempotent replay
     if req.status != "waiting":
-        raise ProductAPIError(SYSTEM, "book_request", f"Request {request_id} is {req.status}")
+        raise ProductAPIError(SYSTEM, "book_request", f"That standby request is already {req.status}")
     run = await get_run(s, tenant_id, run_id)
     v = await get_vehicle(s, tenant_id, run.vehicle_code)
     booked = await run_trips(s, tenant_id, run_id)
     if len(booked) >= v.capacity:
-        raise ProductAPIError(SYSTEM, "book_request", f"{v.label} is full on {run_id}")
+        raise ProductAPIError(SYSTEM, "book_request", f"{v.label} is full on {run_name(run)}")
     if req.needs_wheelchair and sum(1 for t in booked if t.needs_wheelchair) >= v.wheelchair_positions:
         raise ProductAPIError(SYSTEM, "book_request", f"No free wheelchair position on {v.label}")
     t = Trip(id=new_id("trp"), tenant_id=tenant_id, run_id=run_id, rider_id=req.rider_id, pickup_time=pickup_time, eta=pickup_time,

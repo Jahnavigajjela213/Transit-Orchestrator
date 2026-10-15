@@ -154,7 +154,7 @@ export default function DecisionCard({ item, steps, onDone, inWorkflow = false, 
   );
 }
 
-function initialOverride(item: Approval): Record<string, any> {
+export function initialOverride(item: Approval): Record<string, any> {
   const r = item.recommendation || {};
   if (item.step === "open_work_order") return { priority: r.priority, shop_start: toLocalInput(r.shop_start), shop_end: toLocalInput(r.shop_end) };
   if (item.step === "pull_vehicle") return { from: toLocalInput(r.from), until: toLocalInput(r.until) };
@@ -164,7 +164,7 @@ function initialOverride(item: Approval): Record<string, any> {
   return {};
 }
 
-function StepBody({ item, editing, override, setOverride }: {
+export function StepBody({ item, editing, override, setOverride }: {
   item: Approval; editing: boolean; override: Record<string, any>; setOverride: (o: Record<string, any>) => void;
 }) {
   const r = item.recommendation || {};
@@ -242,7 +242,7 @@ function StepBody({ item, editing, override, setOverride }: {
                   <td className="tnum">{a.riders}{a.needs_wheelchair && <Accessibility className="ml-1 inline h-3.5 w-3.5 text-route" aria-label="wheelchair rider" />}</td>
                   <td>
                     {editing ? (
-                      <select className="input min-w-[13rem]" value={o.vehicle_id ?? ""} aria-label={`Vehicle for ${a.run_id}`}
+                      <select className="input min-w-[13rem]" value={o.vehicle_id ?? ""} aria-label={`Vehicle for ${a.route_name} ${a.block_name}`}
                         onChange={(e) => setOverride({ assignments: override.assignments.map((x: any) => x.run_id === a.run_id ? { ...x, vehicle_id: e.target.value || null } : x) })}>
                         {opts.vehicles.map((v: any) => <option key={v.vehicle_id} value={v.vehicle_id}>{v.label}, {v.vehicle_type} ({v.depot})</option>)}
                         <option value="">Leave for the dispatcher</option>
@@ -253,7 +253,7 @@ function StepBody({ item, editing, override, setOverride }: {
                   </td>
                   <td>
                     {editing ? (
-                      <select className="input min-w-36" value={o.driver_id ?? ""} aria-label={`Driver for ${a.run_id}`} disabled={!o.vehicle_id}
+                      <select className="input min-w-36" value={o.driver_id ?? ""} aria-label={`Driver for ${a.route_name} ${a.block_name}`} disabled={!o.vehicle_id}
                         onChange={(e) => setOverride({ assignments: override.assignments.map((x: any) => x.run_id === a.run_id ? { ...x, driver_id: e.target.value } : x) })}>
                         {opts.drivers.map((d: any) => <option key={d.driver_id} value={d.driver_id}>{d.name}</option>)}
                       </select>
@@ -331,7 +331,7 @@ function AdjustBody({ item, editing, override, setOverride }: {
 }
 
 /** Runs the agent could not cover, raised with the dispatcher instead of being skipped. */
-function UncoveredRuns({ runs }: { runs: any[] }) {
+export function UncoveredRuns({ runs }: { runs: any[] }) {
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium leading-relaxed text-stop">No qualified spare vehicle and driver for {runs.length} run(s), {runs.reduce((n, r) => n + r.riders, 0)} booked riders. Please arrange cover by hand: call in an off-duty driver, borrow a vehicle from the other depot, or rebook the riders.</p>

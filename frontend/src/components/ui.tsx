@@ -4,22 +4,19 @@ import { sentence } from "../lib/format";
 
 const tone: Record<string, string> = {
   teal: "bg-route-tint text-route-dark",
-  amber: "bg-signal-tint text-[#8A5900]",
+  amber: "bg-signal-tint text-signal-ink",
   red: "bg-stop-tint text-stop",
   green: "bg-go-tint text-go",
-  grey: "bg-paper text-ink-soft border border-rule",
+  blue: "bg-shop-tint text-shop",
+  grey: "bg-[#EEF1F0] text-ink-soft",
 };
 
 export function Tag({ children, color = "grey", title }: { children: ReactNode; color?: keyof typeof tone; title?: string }) {
-  return (
-    <span title={title} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold ${tone[color]}`}>
-      {children}
-    </span>
-  );
+  return <span title={title} className={`pill ${tone[color]}`}>{children}</span>;
 }
 
 const statusColor: Record<string, keyof typeof tone> = {
-  running: "teal", awaiting_approval: "amber", awaiting_event: "teal", completed: "green", completed_with_issues: "amber",
+  running: "teal", awaiting_approval: "amber", awaiting_event: "blue", completed: "green", completed_with_issues: "red",
   rejected: "grey", compensated: "red", failed: "red", informational: "grey",
   pending: "amber", approved: "green", overridden: "teal", acknowledged: "grey", cancelled: "grey",
   processed: "green", received: "teal", duplicate: "grey", ignored: "grey",
@@ -30,7 +27,7 @@ const statusColor: Record<string, keyof typeof tone> = {
 };
 
 const statusText: Record<string, string> = {
-  awaiting_approval: "Needs approval", awaiting_event: "In the shop", completed_with_issues: "Completed with issues",
+  awaiting_approval: "Needs approval", awaiting_event: "In the shop", completed_with_issues: "With issues", running: "Assessing",
   shadow: "Shadow run", stale: "Stale, not acted on", no_action: "No action taken", restricted: "No wheelchair runs",
 };
 
@@ -52,23 +49,16 @@ export function LevelTag({ level }: { level: string | null | undefined }) {
 
 export function VehicleId({ label, size = "md" }: { label: string | null; size?: "md" | "lg" }) {
   if (!label) return null;
-  return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-md bg-ink font-semibold tracking-wide text-white tnum ${size === "lg" ? "px-2.5 py-1 text-base" : "px-1.5 py-0.5 text-[11px]"}`}>
-      {label}
-    </span>
-  );
+  return <span className={size === "lg" ? "inline-flex items-center rounded-[7px] bg-ink px-2.5 py-1 font-mono text-[15px] font-medium text-white" : "chip-v"}>{label}</span>;
 }
 
 export function PageHeader({ title, intro, actions, eyebrow, badge }: { title: string; intro?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode; badge?: ReactNode }) {
   return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div className="max-w-3xl">
-        {eyebrow && <div className="mb-1 text-xs font-medium text-ink-faint">{eyebrow}</div>}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <h1 className="text-2xl font-semibold leading-tight">{title}</h1>
-          {badge}
-        </div>
-        {intro && <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{intro}</p>}
+    <header className="flex flex-wrap items-end gap-4">
+      <div className="min-w-[280px] flex-1">
+        {eyebrow && <p className="m-0 text-xs text-ink-faint">{eyebrow}</p>}
+        <h1 className={`${eyebrow ? "mt-1" : ""} flex flex-wrap items-center gap-2.5 text-2xl font-semibold tracking-[-0.01em]`}>{title}{badge}</h1>
+        {intro && <p className="mt-1.5 text-ink-soft">{intro}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>

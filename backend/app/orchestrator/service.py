@@ -316,8 +316,8 @@ class OrchestratorService:
         comp = values.get("compensation") or []
         base = f"{f['step'].replace('_', ' ').capitalize()} failed: {f['message']}."
         if comp:
-            base += " Rolled back: " + ", ".join(c["action"].replace("_", " ") for c in comp) + "."
-        return base + " Check the affected runs and finish this step by hand."
+            base += " To keep the products in sync the agent " + "; ".join(c.get("text", c["action"].replace("_", " ")) for c in comp) + "."
+        return base + " Please check the affected runs and finish this step by hand."
 
     async def _escalate(self, s, wf: Workflow, step: str, text: str, title: str | None = None, recommendation: dict | None = None) -> None:
         exists = (await s.execute(select(ApprovalRequest.id).where(ApprovalRequest.workflow_id == wf.id, ApprovalRequest.step == step,

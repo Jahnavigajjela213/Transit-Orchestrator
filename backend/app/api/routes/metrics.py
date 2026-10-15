@@ -158,6 +158,108 @@ async def summary(user: CurrentUser, s: SessionDep):
     }
 
 
+# ---------------------------------------------------------------- pilot measures page
+ACTIVE = ("running", "awaiting_approval", "awaiting_event")
+APPROVAL_STEPS = ("open_work_order", "pull_vehicle", "reassign_runs")
+
+
+def _pilot_values(wfs: list[Workflow], complete_ids: set[str], audited_ids: set[str], decisions: list[tuple]) -> dict:
+    """The proposal's six success measures over one set of vehicle-health workflows and the decisions on them."""
+    mins = [(w.work_order_opened_at - w.detected_at).total_seconds() / 60 for w in wfs if w.work_order_opened_at and w.detected_at]
+    finished = [w for w in wfs if w.status not in ACTIVE]
+    pulled = [w for w in wfs if w.pulled_at]
+    at_risk, covered = sum(w.runs_at_risk for w in pulled), sum(w.runs_covered for w in pulled)
+    audited = [w for w in wfs if w.id in audited_ids]
+    returned_needed = [w for w in pulled if w.status not in ACTIVE]
+    ok = sum(1 for d in decisions if d[1] == "approved")
+    return {
+        "detect_to_work_order_minutes": round(median(mins), 1) if mins else None,
+        "detect_to_work_order_samples": len(mins),
+        "manual_reentries_per_incident": round(sum(len(_manual_entries(w)) for w in finished) / len(finished), 1) if finished else None,
+        "runs_covered_pct": round(100 * covered / at_risk) if at_risk else None,
+        "runs_at_risk": at_risk, "runs_covered": covered,
+        "audit_complete_pct": round(100 * sum(1 for w in audited if w.id in complete_ids) / len(audited)) if audited else None,
+        "acceptance_pct": round(100 * ok / len(decisions)) if decisions else None,
+        "decisions": len(decisions),
+        "auto_returned_pct": round(100 * sum(1 for w in returned_needed if w.returned_at) / len(returned_needed)) if returned_needed else None,
+        "incidents": len(wfs),
+    }
+
+
+@router.get("/pilot")
+async def pilot(user: CurrentUser, s: SessionDep, days: Optional[int] = None):
+    """Pilot measures for the period (days=7, 28, or none for pilot to date), an 8-week trend of each, and dispatcher
+    acceptance by approval step. Baseline from Phase 0 (or shadow mode); targets from the proposal."""
+    tid, t_now = user.tenant_id, now()
+    since = t_now - timedelta(days=days) if days else None
+    wfs = [w for w in (await s.execute(select(Workflow).where(Workflow.tenant_id == tid, Workflow.workflow_type == "vehicle_health",
+                                                              Workflow.status != "shadow"))).scalars().all()]
+    audits = (await s.execute(select(AuditRecord).where(AuditRecord.tenant_id == tid, AuditRecord.workflow_id.is_not(None)))).scalars().all()
+    by_wf: dict[str, list] = {}
+    for a in audits:
+        by_wf.setdefault(a.workflow_id, []).append(a)
+    complete_ids = {wid for wid, recs in by_wf.items() if all(is_complete(r) for r in recs) and any(r.record_type == "assessment" for r in recs)}
+    audited_ids = set(by_wf)
+    rows = (await s.execute(select(ApprovalRequest.step, ApprovalRequest.status, ApprovalRequest.decided_at, ApprovalRequest.workflow_id).where(
+        ApprovalRequest.tenant_id == tid, ApprovalRequest.kind == "approval", ApprovalRequest.status.in_(["approved", "rejected", "overridden"]),
+        ApprovalRequest.decided_at.is_not(None)))).all()
+    vh_ids = {w.id for w in wfs}
+    decisions = [r for r in rows if r[3] in vh_ids]
+
+    in_period = [w for w in wfs if not since or (w.detected_at and w.detected_at >= since)]
+    dec_period = [d for d in decisions if not since or d[2] >= since]
+    current = _pilot_values(in_period, complete_ids, audited_ids, dec_period)
+
+    # 8 weekly buckets, oldest first, Monday-based in agency time
+    this_monday = (t_now - timedelta(days=t_now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    weeks = []
+    for i in range(7, -1, -1):
+        w0, w1 = this_monday - timedelta(weeks=i), this_monday - timedelta(weeks=i - 1)
+        ws = [w for w in wfs if w.detected_at and w0 <= w.detected_at < w1]
+        ds = [d for d in decisions if w0 <= d[2] < w1]
+        weeks.append({"week": w0.date().isoformat(), **_pilot_values(ws, complete_ids, audited_ids, ds)})
+
+    steps = []
+    for step in APPROVAL_STEPS:
+        mine = [d for d in dec_period if d[0] == step]
+        counts = {k: sum(1 for d in mine if d[1] == k) for k in ("approved", "overridden", "rejected")}
+        weekly = []
+        for i in range(7, -1, -1):
+            w0, w1 = this_monday - timedelta(weeks=i), this_monday - timedelta(weeks=i - 1)
+            ds = [d for d in decisions if d[0] == step and w0 <= d[2] < w1]
+            ok = sum(1 for d in ds if d[1] == "approved")
+            weekly.append({"week": w0.date().isoformat(), "decisions": len(ds), "acceptance_pct": round(100 * ok / len(ds)) if ds else None})
+        total = sum(counts.values())
+        steps.append({"step": step, **counts, "decisions": total, "acceptance_pct": round(100 * counts["approved"] / total) if total else None,
+                      "weekly": weekly})
+    readiness = {r["step"]: r for r in (await summary_readiness(s, tid))}
+    for st in steps:
+        r = readiness.get(st["step"])
+        st["ready"], st["rule"], st["level"] = (r or {}).get("ready", False), (r or {}).get("rule"), (r or {}).get("level")
+    base = await baseline_for(s, tid)
+    return {"days": days, "measures": current, "weeks": weeks, "steps": steps,
+            "baseline": base["values"], "baseline_source": base["source"], "baseline_notes": base["notes"], "generated_at": t_now}
+
+
+async def summary_readiness(s, tid: str) -> list[dict]:
+    """Which approval steps have earned a move to autonomous (same rule as the summary), with each step's current level."""
+    rules = await policy_engine.rules(s, tid, "vehicle_health")
+    need = rules.get("readiness") or {}
+    min_n, min_pct = int(need.get("min_decisions", READY_MIN_DECISIONS)), float(need.get("min_acceptance_pct", READY_MIN_ACCEPTANCE))
+    hist = (await s.execute(select(ApprovalRequest.step, ApprovalRequest.status).where(
+        ApprovalRequest.tenant_id == tid, ApprovalRequest.kind == "approval", ApprovalRequest.status.in_(["approved", "rejected", "overridden"]),
+        ApprovalRequest.decided_at >= now() - timedelta(days=28)))).all()
+    out = []
+    for step, cfg in rules["steps"].items():
+        recent = [h for h in hist if h[0] == step]
+        n, ok = len(recent), sum(1 for h in recent if h[1] == "approved")
+        pct = round(100 * ok / n) if n else None
+        out.append({"step": step, "level": cfg.get("level"), "decisions_28d": n, "acceptance_pct": pct,
+                    "ready": cfg.get("level") == "semi_autonomous" and n >= min_n and (pct or 0) >= min_pct,
+                    "rule": f"{min_n}+ decisions in 28 days with {min_pct:g}%+ approved unchanged"})
+    return out
+
+
 @router.get("/baseline")
 async def get_baseline(user: CurrentUser, s: SessionDep):
     return await baseline_for(s, user.tenant_id)

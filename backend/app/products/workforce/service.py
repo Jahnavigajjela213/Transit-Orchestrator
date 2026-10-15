@@ -18,5 +18,5 @@ async def list_employees(s: AsyncSession, tenant_id: str, active_only: bool = Fa
 async def get_employee(s: AsyncSession, tenant_id: str, employee_number: str) -> Employee:
     e = await s.get(Employee, employee_number)
     if not e or e.tenant_id != tenant_id:
-        raise ProductAPIError(SYSTEM, "get_employee", f"Employee {employee_number} not found")
+        raise ProductAPIError(SYSTEM, "get_employee", "That driver is not in the workforce system")
     return e

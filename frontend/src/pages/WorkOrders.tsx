@@ -1,89 +1,156 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
-import { dayTime, sentence } from "../lib/format";
+import { easternNow } from "../lib/format";
 import { useToast } from "../components/Toast";
-import { Empty, ErrorNote, Loading, PageHeader, SeverityTag, StatusBadge, Tag } from "../components/ui";
+import { ErrorNote, Loading, PageHeader } from "../components/ui";
 
 interface WO {
   id: string; asset_number: string; status: string; priority: string; fault_code: string | null; title: string; description: string;
   source: string; shop_depot: string | null; shop_start: string | null; shop_end: string | null; external_ref: string | null;
   created_by: string; created_at: string; closed_at: string | null; closed_by: string | null; resolution: string | null;
 }
+interface Bay { day: string; depot: string; bays_total: number; bays_booked: number }
+
+const PRIO: Record<string, string> = { critical: "bg-stop-tint text-stop", high: "bg-signal-tint text-signal-ink", medium: "bg-route-tint text-route-dark", low: "bg-[#EEF1F0] text-ink-soft" };
+const LANES: { key: "open" | "in_progress" | "closed"; title: string; dot: string }[] = [
+  { key: "open", title: "Waiting for the shop", dot: "bg-signal" },
+  { key: "in_progress", title: "In progress", dot: "bg-shop" },
+  { key: "closed", title: "Closed today", dot: "bg-go" },
+];
+// The list is read from Databricks, which trails maintenance by several seconds: what the shop just did wins until it catches up.
+const RANK: Record<string, number> = { open: 0, in_progress: 1, closed: 2, cancelled: 2 };
+
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const wd = (s: string) => new Date(s).toLocaleDateString([], { weekday: "short" });
+const hm = (s: string) => new Date(s).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+function shopWindow(w: WO): string {
+  if (!w.shop_start || !w.shop_end) return "No shop window";
+  const sameDay = w.shop_start.slice(0, 10) === w.shop_end.slice(0, 10);
+  return `${wd(w.shop_start)} ${hm(w.shop_start)} → ${sameDay ? "" : `${wd(w.shop_end)} `}${hm(w.shop_end)}`;
+}
+const sentenceCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function WorkOrders() {
   const { user } = useAuth();
   const toast = useToast();
-  const [status, setStatus] = useState("open,in_progress");
-  const { data, error, reload } = useData<WO[]>(`/products/asset-mgmt/work-orders?status=${status}`, [status]);
+  const { data, error } = useData<WO[]>("/products/asset-mgmt/work-orders");
   const { data: assets } = useData<{ asset_number: string; unit_label: string }[]>("/products/asset-mgmt/assets");
+  const { data: bays } = useData<Bay[]>("/products/asset-mgmt/shop-capacity?days=4");
   const label = Object.fromEntries((assets || []).map((a) => [a.asset_number, a.unit_label]));
   const isShop = user?.role === "shop_manager" || user?.role === "admin";
-  const [resolution, setResolution] = useState<Record<string, string>>({});
-  // The list is read from Databricks, which trails maintenance by several seconds: show what the shop just did right away.
+  const [baysOpen, setBaysOpen] = useState(true);
   const [done, setDone] = useState<Record<string, WO>>({});
-  const rank: Record<string, number> = { open: 0, in_progress: 1, closed: 2, cancelled: 2 };
-  const rows = (data || []).map((w) => (done[w.id] && rank[done[w.id].status] > rank[w.status] ? done[w.id] : w));
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const today = ymd(easternNow());
+  const lanes = useMemo(() => {
+    const rows = (data || []).map((w) => (done[w.id] && RANK[done[w.id].status] > RANK[w.status] ? done[w.id] : w));
+    return LANES.map((l) => ({
+      ...l,
+      cards: rows.filter((w) => l.key === "closed"
+        ? (w.status === "closed" || w.status === "cancelled") && (w.closed_at ?? w.created_at).slice(0, 10) === today
+        : w.status === l.key)
+        .sort((a, b) => (RANK[a.status] === 2 ? (b.closed_at ?? "").localeCompare(a.closed_at ?? "") : b.created_at.localeCompare(a.created_at))),
+    }));
+  }, [data, done, today]);
+
+  const days = useMemo(() => {
+    const by = new Map<string, { booked: number; total: number }>();
+    for (const b of bays || []) {
+      const d = by.get(b.day) ?? { booked: 0, total: 0 };
+      d.booked += b.bays_booked; d.total += b.bays_total;
+      by.set(b.day, d);
+    }
+    return [...by.entries()].map(([day, v]) => ({ day, ...v }));
+  }, [bays]);
+  const depots = useMemo(() => {
+    const first = bays?.[0]?.day;
+    return (bays || []).filter((b) => b.day === first).map((b) => `${b.depot} ${b.bays_total} bay${b.bays_total === 1 ? "" : "s"}`).join(" · ");
+  }, [bays]);
 
   async function act(wo: WO, action: "start" | "close") {
+    setBusy(wo.id);
     try {
-      const updated = await api.post<WO>(`/products/asset-mgmt/work-orders/${wo.id}/${action}`, action === "close" ? { resolution: resolution[wo.id] || "Repaired and road tested" } : {});
+      const updated = await api.post<WO>(`/products/asset-mgmt/work-orders/${wo.id}/${action}`, action === "close" ? { resolution: "Repaired and road tested" } : {});
       setDone((d) => ({ ...d, [wo.id]: updated }));
       toast(action === "close" ? `Closed ${wo.id}` : `Started ${wo.id}`);
-      reload();
-    } catch (e: any) { toast(e.message, "error"); }
+    } catch (e: any) { toast(e.message, "error"); } finally { setBusy(null); }
   }
 
   return (
-    <div>
-      <PageHeader title="Maintenance" eyebrow="Work orders · asset management" intro="The shop's view in asset management (FASTER). Start work first, then close it: closing a work order the agent opened returns the vehicle to the schedule automatically. New work orders can take a few seconds to show here while they sync to Databricks." />
-      <div className="seg mb-4" role="tablist" aria-label="Status">
-        {[["open,in_progress", "Open"], ["closed,cancelled", "Closed"], ["", "All"]].map(([v, l]) => (
-          <button key={l} role="tab" aria-selected={status === v} onClick={() => setStatus(v)}>{l}</button>
-        ))}
-      </div>
-      {!isShop && <p className="mb-3 text-xs text-ink-soft">Sign in as the shop manager to start or close work orders.</p>}
+    <>
+      <PageHeader eyebrow="Work orders · FASTER" title="Maintenance"
+        intro="Start work first, then close it. Closing an agent-opened work order returns the vehicle to the schedule automatically."
+        actions={<button type="button" onClick={() => setBaysOpen(!baysOpen)} className="h-10 rounded-[10px] border border-rule bg-white px-3.5 text-[13px]">{baysOpen ? "Hide shop bays" : "Show shop bays"}</button>} />
+
       {error && <ErrorNote message={error} />}
-      {!data ? <Loading /> : rows.length === 0 ? <div className="panel"><Empty title="No work orders here" /></div> : (
-        <div className="panel overflow-x-auto">
-          <table className="table">
-            <thead><tr><th>Work order</th><th>Vehicle</th><th>Priority</th><th>Shop window</th><th>Opened</th><th>Status</th><th className="w-72"></th></tr></thead>
-            <tbody>
-              {rows.map((w) => (
-                <tr key={w.id}>
-                  <td><div className="font-medium">{w.id}</div><div className="text-xs">{w.title}</div>
-                    {w.source === "orchestrator" && <div className="mt-0.5"><Tag color="teal">Opened by agent</Tag>{w.external_ref && <Link to={`/workflows/${w.external_ref}`} className="ml-1.5 text-2xs text-route hover:underline">orchestration</Link>}</div>}</td>
-                  <td>{label[w.asset_number] ?? ""}<div className="text-2xs text-ink-soft">{w.asset_number}</div></td>
-                  <td><SeverityTag severity={w.priority} /></td>
-                  <td className="text-xs">{w.shop_start ? <>{dayTime(w.shop_start)}<br />to {dayTime(w.shop_end)}<div className="text-ink-soft">{w.shop_depot}</div></> : "—"}</td>
-                  <td className="text-xs">{dayTime(w.created_at)}<div className="text-ink-soft">{w.created_by}</div></td>
-                  <td><StatusBadge status={w.status} />{w.closed_by && <div className="mt-0.5 text-2xs text-ink-soft">{sentence(w.status)} by {w.closed_by}</div>}</td>
-                  <td>
-                    {isShop && ["open", "in_progress"].includes(w.status) && (
-                      <div className="flex flex-col gap-1.5">
-                        {w.status === "in_progress" && <input className="input text-xs" placeholder="Resolution (optional)" value={resolution[w.id] || ""} onChange={(e) => setResolution({ ...resolution, [w.id]: e.target.value })} aria-label={`Resolution for ${w.id}`} />}
-                        {w.status === "open" ? (
-                          <div className="flex items-center gap-2">
-                            <button className="btn-primary" onClick={() => act(w, "start")}>Start work</button>
-                            <span className="text-2xs text-ink-soft">Start work before it can be closed</span>
-                          </div>
-                        ) : (
-                          <div className="flex gap-1.5">
-                            <button className="btn-primary" onClick={() => act(w, "close")}>Close work order</button>
-                          </div>
-                        )}
+      {!data ? <div className="card"><Loading /></div> : (
+        <div className="flex min-h-0 gap-4">
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3.5 md:grid-cols-3">
+            {lanes.map((lane) => (
+              <section key={lane.key} className="flex min-h-[520px] flex-col rounded-[14px] border border-rule bg-[#ECEFEE]">
+                <div className="flex items-center gap-2 px-4 pb-2.5 pt-3.5">
+                  <span className={`h-2 w-2 rounded-full ${lane.dot}`} aria-hidden />
+                  <h2 className="flex-1 text-sm font-semibold">{lane.title}</h2>
+                  <span className="text-xs text-ink-faint tnum">{lane.cards.length}</span>
+                </div>
+                <div className="flex flex-col gap-2.5 px-3 pb-3.5">
+                  {lane.cards.length === 0 && <span className="px-1 py-2.5 text-xs text-[#9AA4AB]">Nothing here</span>}
+                  {lane.cards.map((w) => (
+                    <article key={w.id} className="rounded-xl border border-rule bg-white p-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="chip-v">{label[w.asset_number] ?? "Vehicle"}</span>
+                        <span className="flex-1 truncate font-mono text-[11px] text-ink-faint">{w.id}</span>
+                        <span className={`rounded-full px-[7px] py-0.5 text-[10.5px] font-semibold ${PRIO[w.priority] ?? PRIO.low}`}>{sentenceCase(w.priority)}</span>
                       </div>
-                    )}
-                    {w.resolution && <div className="text-xs text-ink-soft">{w.resolution}</div>}
-                  </td>
-                </tr>
+                      <div className="mt-2 text-[13.5px] font-semibold">{w.title}</div>
+                      <div className="mt-1 text-xs text-ink-soft">{shopWindow(w)}{w.shop_depot ? ` · ${w.shop_depot}` : ""}</div>
+                      <div className="mt-2 text-[11.5px] text-route">
+                        {w.status === "closed" && w.source === "orchestrator" ? "Returned to service automatically"
+                          : w.status === "closed" || w.status === "cancelled" ? `${sentenceCase(w.status)}${w.closed_by ? ` by ${w.closed_by}` : ""}${w.resolution ? ` · ${w.resolution}` : ""}`
+                          : w.source === "orchestrator" ? (w.external_ref ? <Link to={`/workflows/${w.external_ref}`} className="hover:underline">Opened by agent · orchestration</Link> : "Opened by agent")
+                          : `Manual · ${w.description || w.created_by}`}
+                      </div>
+                      {isShop && w.status === "open" && (
+                        <button type="button" disabled={busy === w.id} onClick={() => act(w, "start")}
+                          className="mt-3 h-10 w-full rounded-[10px] bg-route font-semibold text-white hover:bg-route-dark disabled:opacity-50">Start work</button>
+                      )}
+                      {isShop && w.status === "in_progress" && (
+                        <button type="button" disabled={busy === w.id} onClick={() => act(w, "close")}
+                          className="mt-3 h-10 w-full rounded-[10px] border border-route bg-white font-semibold text-route hover:bg-route-tint disabled:opacity-50">Close work order</button>
+                      )}
+                      {!isShop && (w.status === "open" || w.status === "in_progress") && (
+                        <div className="mt-3 text-[11.5px] text-ink-faint">The shop manager {w.status === "open" ? "starts" : "closes"} this work order.</div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+
+          {baysOpen && (
+            <aside aria-label="Shop bays" className="flex h-fit w-[300px] shrink-0 flex-col gap-3.5 rounded-[14px] border border-rule bg-white p-[18px]">
+              <h2 className="text-sm font-semibold">Shop bays · next {days.length || 4} days</h2>
+              {!bays ? <Loading /> : days.map((d) => (
+                <div key={d.day}>
+                  <div className="flex text-[12.5px]">
+                    <span className="flex-1 font-medium">{`${wd(`${d.day}T12:00:00`)} ${Number(d.day.slice(8))}`}</span>
+                    <span className="text-ink-soft tnum">{d.booked} of {d.total} booked</span>
+                  </div>
+                  <div className="mt-1.5 flex gap-1" aria-hidden>
+                    {Array.from({ length: d.total }, (_, i) => <span key={i} className={`h-2.5 flex-1 rounded-[3px] ${i < d.booked ? "bg-route" : "bg-rule"}`} />)}
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+              <p className="text-xs leading-relaxed text-ink-faint">{depots ? `${depots}. ` : ""}The asset agent books the first free bay that fits the repair.</p>
+            </aside>
+          )}
         </div>
       )}
-    </div>
+    </>
   );
 }

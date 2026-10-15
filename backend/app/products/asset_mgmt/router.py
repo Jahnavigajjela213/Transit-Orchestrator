@@ -29,6 +29,13 @@ async def fault_codes(user: CurrentUser, s: SessionDep):
     return [{c.name: getattr(f, c.name) for c in f.__table__.columns} for f in await service.list_fault_codes(s)]
 
 
+@router.get("/shop-capacity")
+async def shop_capacity(user: CurrentUser, s: SessionDep, days: int = 4):
+    days = max(1, min(days, 14))
+    return [{"day": c.day.isoformat(), "depot": c.depot, "bays_total": c.bays_total, "bays_booked": c.bays_booked}
+            for c in await service.shop_capacity(s, user.tenant_id, days)]
+
+
 @router.get("/work-orders")
 async def work_orders(user: CurrentUser, s: SessionDep, status: Optional[str] = None):
     return [wo_dict(w) for w in await service.list_work_orders(s, user.tenant_id, status)]

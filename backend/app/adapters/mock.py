@@ -22,7 +22,7 @@ def _iso(d: Optional[datetime]) -> Optional[str]:
 async def _ext(s, ctx: ActionContext, canonical_id: str, system: str) -> str:
     ext = await identity.to_external(s, ctx.tenant_id, canonical_id, system)
     if not ext:
-        raise ProductAPIError(system, "identity", f"No {system} id mapped for {canonical_id}")
+        raise ProductAPIError(system, "identity", f"{system.replace('_', ' ').capitalize()} has no record linked to this {canonical_id.split('_')[0].replace('veh', 'vehicle').replace('drv', 'driver').replace('trp', 'trip')}")
     return ext
 
 

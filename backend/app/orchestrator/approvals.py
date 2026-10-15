@@ -22,15 +22,16 @@ class DecisionError(Exception):
 def _validate_override(ar: ApprovalRequest, override: dict) -> dict:
     if ar.step == "reassign_runs":
         per_run = ar.options.get("per_run", {})
+        names = {x["run_id"]: f"{x['route_name']} {x['block_name']}" for x in (ar.recommendation or {}).get("assignments", [])}
         clean = []
         for a in override.get("assignments", []):
             opts = per_run.get(a.get("run_id"))
             if opts is None:
-                raise DecisionError(400, f"Run {a.get('run_id')} is not part of this plan.")
+                raise DecisionError(400, "That run is not part of this plan.")
             if a.get("vehicle_id") and a["vehicle_id"] not in {v["vehicle_id"] for v in opts["vehicles"]}:
-                raise DecisionError(400, f"That vehicle did not pass the checks for {a['run_id']}.")
+                raise DecisionError(400, f"That vehicle did not pass the checks for {names.get(a['run_id'], 'this run')}.")
             if a.get("driver_id") and a["driver_id"] not in {d["driver_id"] for d in opts["drivers"]}:
-                raise DecisionError(400, f"That driver is not qualified or available for {a['run_id']}.")
+                raise DecisionError(400, f"That driver is not qualified or available for {names.get(a['run_id'], 'this run')}.")
             clean.append({k: a.get(k) for k in ("run_id", "vehicle_id", "driver_id")})
         return {"assignments": clean}
     if ar.step == "open_work_order":

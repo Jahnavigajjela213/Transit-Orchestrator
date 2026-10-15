@@ -1,34 +1,35 @@
 import { useSearchParams } from "react-router-dom";
-import { CalendarClock, FlaskConical, MessageSquare, SlidersHorizontal, Zap } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
 import FaultForm from "../components/FaultForm";
 import { useToast } from "../components/Toast";
-import { PageHeader, Section } from "../components/ui";
+import { Loading, PageHeader } from "../components/ui";
 import Schedule from "./Schedule";
 import Riders from "./Riders";
 
 const TABS = [
-  { key: "fault", label: "Raise a fault", icon: Zap },
-  { key: "scheduling", label: "Scheduling data", icon: CalendarClock },
-  { key: "riders", label: "Rider messages", icon: MessageSquare },
-  { key: "controls", label: "Demo controls", icon: SlidersHorizontal },
+  { key: "fault", label: "Raise a fault" },
+  { key: "scheduling", label: "Scheduling data" },
+  { key: "riders", label: "Rider messages" },
+  { key: "controls", label: "Demo controls" },
 ] as const;
 
 /** Testing playground: drive the synthetic products and look at the data they hold, outside the operational screens. */
 export default function Simulate() {
   const [params, setParams] = useSearchParams();
   const tab = TABS.find((t) => t.key === params.get("tab"))?.key ?? "fault";
+  const pick = (key: string) => { const p = new URLSearchParams(params); p.set("tab", key); if (key !== "riders") p.delete("workflow"); setParams(p); };
   return (
-    <div className="flex flex-col lg:min-h-0 lg:flex-1">
+    <>
       <PageHeader title="Simulate" eyebrow="Testing playground"
-        badge={<span className="inline-flex items-center gap-1 rounded-full border border-signal/40 bg-signal-tint px-2 py-0.5 text-2xs font-semibold text-[#8A5900]"><FlaskConical className="h-3 w-3" aria-hidden />Sandbox</span>}
-        intro="Raise faults and inspect the synthetic scheduling and rider data. Everything here goes through the same event backbone and product APIs a real integration would use." />
-      <div className="tabs mb-5" role="tablist">
+        badge={<span className="rounded-full border border-signal-line bg-signal-tint px-2.5 py-[3px] text-[11px] font-semibold tracking-normal text-signal-ink">Sandbox</span>}
+        intro="Everything here goes through the same event backbone and product APIs a real integration would use." />
+      <div role="tablist" aria-label="Playground" className="flex gap-6 border-b border-rule">
         {TABS.map((t) => (
-          <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setParams({ tab: t.key })}>
-            <t.icon className="h-4 w-4" aria-hidden /> {t.label}
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => pick(t.key)}
+            className={`-mb-px border-b-2 pb-3 pt-2 text-sm font-medium ${tab === t.key ? "border-route text-ink" : "border-transparent text-ink-soft hover:text-ink"}`}>
+            {t.label}
           </button>
         ))}
       </div>
@@ -36,52 +37,50 @@ export default function Simulate() {
       {tab === "scheduling" && <Schedule embedded />}
       {tab === "riders" && <Riders embedded />}
       {tab === "controls" && <DemoControls />}
-    </div>
+    </>
   );
 }
 
 interface Failure { target: string; description: string; mode: string }
+const MODES: [string, string][] = [["off", "Works"], ["fail_once", "Fails once"], ["fail_always", "Keeps failing"]];
 
 function DemoControls() {
   const { user } = useAuth();
   const toast = useToast();
   const { data: failures, reload } = useData<Failure[]>("/api/simulator/failures");
   const canAct = user?.role !== "viewer";
-  return (
-    <div className="space-y-5">
-      <Section title="Product outages" subtitle={'"Fails once" is a short outage: the adapter retries and the step succeeds. "Keeps failing" makes the step fail, so the agent rolls back earlier steps and asks a person to finish.'}>
-        <div className="overflow-x-auto">
-          <table className="table">
-            <thead><tr><th>Product action</th><th className="w-80">Behaviour</th></tr></thead>
-            <tbody>
-              {(failures || []).map((f) => (
-                <tr key={f.target}>
-                  <td><div className="font-medium">{f.description}</div><code className="font-mono text-2xs text-ink-faint">{f.target}</code></td>
-                  <td>
-                    <div className="seg" role="radiogroup" aria-label={f.description}>
-                      {[["off", "Works"], ["fail_once", "Fails once"], ["fail_always", "Keeps failing"]].map(([m, l]) => (
-                        <button key={m} role="radio" aria-checked={f.mode === m} aria-selected={f.mode === m} disabled={!canAct}
-                          onClick={async () => { try { await api.post("/api/simulator/failures", { target: f.target, mode: m }); reload(); toast(`${f.description}: ${l.toLowerCase()}`); } catch (e: any) { toast(e.message, "error"); } }}>{l}</button>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Section>
 
+  async function set(f: Failure, mode: string, label: string) {
+    try { await api.post("/api/simulator/failures", { target: f.target, mode }); reload(); toast(`${f.description}: ${label.toLowerCase()}`); }
+    catch (e: any) { toast(e.message, "error"); }
+  }
+
+  return (
+    <section className="card overflow-hidden">
+      <h2 className="px-[18px] pb-1 pt-4 text-sm font-semibold">Product outages</h2>
+      <p className="px-[18px] pb-3 text-[12.5px] text-ink-soft">“Fails once” retries and succeeds; “Keeps failing” makes the agent roll back earlier steps and ask a person.</p>
+      {!failures ? <Loading /> : failures.map((f) => (
+        <div key={f.target} className="flex flex-wrap items-center gap-3 border-t border-rule-soft px-[18px] py-3">
+          <span className="min-w-[220px] flex-1"><b className="font-semibold">{f.description}</b></span>
+          <span role="radiogroup" aria-label={f.description} className="flex rounded-[10px] border border-rule p-[3px]">
+            {MODES.map(([m, l]) => (
+              <button key={m} type="button" role="radio" aria-checked={f.mode === m} disabled={!canAct} onClick={() => set(f, m, l)}
+                className={`rounded-[7px] px-3 py-1.5 text-xs ${f.mode === m ? (m === "off" ? "bg-go text-white" : "bg-stop text-white") : "text-ink-soft hover:text-ink"}`}>
+                {l}
+              </button>
+            ))}
+          </span>
+        </div>
+      ))}
       {user?.role === "admin" && (
-        <Section title="Reset demo data" subtitle="Deletes all orchestrations, events and audit records for both agencies and regenerates the synthetic data. Databricks re-copies every table afterwards (a few minutes).">
-          <div className="flex justify-end px-5 py-4">
-            <button className="btn-danger" onClick={async () => {
-              if (!confirm("Reset all demo data for both agencies?")) return;
-              try { await api.post("/api/admin/reset"); toast("Demo data reset"); setTimeout(() => location.reload(), 600); } catch (e: any) { toast(e.message, "error"); }
-            }}>Reset demo data</button>
-          </div>
-        </Section>
+        <div className="flex flex-wrap items-center gap-3 border-t border-rule bg-[#FBF7F6] px-[18px] py-4">
+          <span className="flex-1 text-[13px] text-ink-soft">Reset deletes all orchestrations, events and audit records for both agencies and regenerates the data. Databricks re-copies every table afterwards (a few minutes).</span>
+          <button type="button" className="h-10 rounded-[10px] border border-stop-line bg-white px-3.5 text-stop" onClick={async () => {
+            if (!confirm("Reset all demo data for both agencies?")) return;
+            try { await api.post("/api/admin/reset"); toast("Demo data reset"); setTimeout(() => location.reload(), 600); } catch (e: any) { toast(e.message, "error"); }
+          }}>Reset demo data</button>
+        </div>
       )}
-    </div>
+    </section>
   );
 }

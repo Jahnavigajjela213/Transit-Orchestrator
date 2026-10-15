@@ -1,12 +1,12 @@
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
-import { ago, dayTime, easternNow, sentence, toLocalInput } from "../lib/format";
+import { dayTime, easternNow, sentence, toLocalInput } from "../lib/format";
 import type { ShadowRec } from "../lib/types";
 import { useToast } from "../components/Toast";
-import { Empty, ErrorNote, Json, Loading, PageHeader, Section, SeverityTag, StatusBadge, Tag, VehicleId } from "../components/ui";
+import { Empty, ErrorNote, Loading, PageHeader, SeverityTag, VehicleId } from "../components/ui";
 
 interface StepSummary {
   step: string; recommended: number; matched: number; differed: number; no_action: number; open: number;
@@ -115,6 +115,28 @@ function ByHandForm({ r, onDone }: { r: ShadowRec; onDone: () => void }) {
   );
 }
 
+const VERDICT: Record<string, { label: string; cls: string }> = {
+  matched: { label: "Matched", cls: "bg-go-tint text-go" }, differed: { label: "Differed", cls: "bg-signal-tint text-signal-ink" },
+  open: { label: "Waiting for people", cls: "bg-[#EEF1F0] text-ink-soft" }, no_action: { label: "No action", cls: "bg-[#EEF1F0] text-ink-soft" },
+};
+const FILTERS: [string, string][] = [["", "All"], ["open", "Waiting for people"], ["matched", "Matched"], ["differed", "Differed"], ["no_action", "No action"]];
+
+function median(xs: number[]): number | null {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+function Kpi({ label, value, note, accent }: { label: string; value: string; note: string; accent?: boolean }) {
+  return (
+    <div className="card px-5 py-[18px]">
+      <div className="text-xs text-ink-soft">{label}</div>
+      <div className={`mt-1.5 text-[30px] font-semibold leading-tight ${accent ? "text-route" : ""}`}>{value}</div>
+      <div className="text-xs text-ink-faint">{note}</div>
+    </div>
+  );
+}
+
 export default function Shadow() {
   const { user } = useAuth();
   const toast = useToast();
@@ -123,115 +145,135 @@ export default function Shadow() {
   const [acting, setActing] = useState<string | null>(null);  // the row whose by-hand form is open
   const { data: summary } = useData<{ steps: StepSummary[]; total: number }>("/api/shadow/summary");
   const { data, error, reload } = useData<ShadowRec[]>(`/api/shadow${status ? `?status=${status}` : ""}`, [status]);
+  const { data: all } = useData<ShadowRec[]>("/api/shadow");
+  const { data: metrics } = useData<{ baseline: Record<string, number | null>; baseline_source: string }>("/api/metrics/summary");
   const { data: pol } = useData<{ rules: any }>("/api/policies/vehicle_health");
   const canReview = user?.role === "dispatcher" || user?.role === "shop_manager" || user?.role === "admin";
   const inShadow = pol?.rules?.mode === "shadow";
 
+  // headline figures, computed from the shadow records themselves; "—" when there is nothing to compare yet
+  const compared = (all || []).filter((r) => r.agreement_pct !== null);
+  const agreement = compared.length ? Math.round(compared.reduce((n, r) => n + (r.agreement_pct ?? 0), 0) / compared.length) : null;
+  const ahead = median((all || []).map((r) => r.agent_ahead_minutes).filter((x): x is number => x !== null));
+  const manual = metrics?.baseline?.manual_reentries_per_incident ?? null;
+  const dates = (all || []).map((r) => r.recommended_at).sort();
+
   async function review(id: string, verdict: string) {
     try { await api.post(`/api/shadow/${id}/review`, { verdict }); toast("Review saved"); reload(); } catch (e: any) { toast(e.message, "error"); }
   }
-
   async function noAction(id: string) {
     try { await api.post(`/api/shadow/${id}/no-action`); toast("Closed as no action needed"); reload(); } catch (e: any) { toast(e.message, "error"); }
   }
-
   async function measure() {
     try {
-      const r = await api.post<{ sample: number; measured: Record<string, number> }>("/api/metrics/baseline/measure");
-      toast(`Baseline measured from ${r.sample} shadow incident(s). See the Overview.`);
+      const r = await api.post<{ sample: number }>("/api/metrics/baseline/measure");
+      toast(`Baseline measured from ${r.sample} shadow incident(s).`);
     } catch (e: any) { toast(e.message, "error"); }
   }
 
   return (
-    <div className="space-y-5">
-      <PageHeader title="Shadow mode"
-        intro="Before go-live the agent runs on real events but takes no action. It records what it would have done; people keep working in the products; this screen puts the two side by side."
+    <>
+      <PageHeader title="Shadow mode" eyebrow={`Governance · ${dates.length ? `${dayTime(dates[0])} – ${dayTime(dates[dates.length - 1])}` : "no shadow runs yet"}`}
+        intro="The agent decides silently while people work as usual; here the two are compared before any step goes live."
         actions={<>
-          <Link to="/policies" className="btn-quiet">{inShadow ? "Vehicle health is in shadow mode" : "Turn on shadow mode"}</Link>
-          {user?.role === "admin" && <button className="btn-primary" onClick={measure}>Measure Phase 0 baseline from shadow runs</button>}
+          <Link to="/policies" className={`pill self-end px-3 py-1.5 ${inShadow ? "bg-route-tint text-route-dark" : "bg-[#EEF1F0] text-ink-soft"}`}>
+            {inShadow ? "Policy is in Shadow" : "Policy is Live · turn on Shadow"}
+          </Link>
+          {user?.role === "admin" && <button className="btn-lg h-9 border border-rule bg-white px-3.5 text-[13px]" onClick={measure}>Measure baseline</button>}
         </>} />
 
-      <Section title="Agent compared with people, by step">
+      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">
+        <Kpi label="Agreement with people" value={agreement === null ? "—" : `${agreement}%`} accent={agreement !== null}
+          note={compared.length ? `across ${compared.length} compared recommendation${compared.length === 1 ? "" : "s"}` : "no data yet"} />
+        <Kpi label="Agent ready earlier by" value={ahead === null ? "—" : `${Math.round(ahead)} min`} note={ahead === null ? "no data yet" : "median, agent vs first human action"} />
+        <Kpi label="Manual entries avoided" value={manual === null ? "—" : String(manual)}
+          note={manual === null ? "no data yet" : `per incident, ${metrics?.baseline_source === "measured_shadow" ? "measured in shadow mode" : "baseline"}`} />
+      </div>
+
+      <section className="card px-5 py-[18px]">
+        <h2 className="mb-3.5 text-sm font-semibold">Agreement by step</h2>
         {!summary ? <Loading /> : summary.steps.length === 0 ? (
-          <Empty title="No shadow runs yet">Set the run mode to Shadow on the <Link to="/policies" className="text-route underline">Autonomy policy</Link> screen, then report a vehicle fault and handle it by hand in the connected systems (Maintenance, Scheduling).</Empty>
+          <p className="text-[13px] text-ink-soft">No shadow runs yet. Set the run mode to Shadow on the <Link to="/policies" className="underline">Autonomy policy</Link>, then raise a fault and handle it by hand in the connected systems.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead><tr><th>Step</th><th>Recommended</th><th>Matched</th><th>Differed</th><th>No action</th><th>Agreement</th><th>Agent ready earlier by</th><th>Reviews (agent / same / person)</th><th>Ready to go live</th></tr></thead>
-              <tbody>{summary.steps.map((s) => (
-                <tr key={s.step}>
-                  <td className="font-medium">{sentence(s.step)}</td><td className="tnum">{s.recommended}</td><td className="tnum">{s.matched}</td>
-                  <td className="tnum">{s.differed}</td><td className="tnum">{s.no_action}</td>
-                  <td className="tnum font-semibold">{s.agreement_pct === null ? "—" : `${s.agreement_pct}%`}</td>
-                  <td className="tnum">{s.median_agent_ahead_minutes === null ? "—" : `${s.median_agent_ahead_minutes} min (median)`}</td>
-                  <td className="tnum">{s.agent_better} / {s.same} / {s.human_better}</td>
-                  <td>{s.ready_to_go_live ? <Tag color="green">Ready</Tag> : <Tag>Not yet</Tag>}</td>
-                </tr>
-              ))}</tbody>
-            </table>
+          <div className="flex flex-col gap-3">
+            {summary.steps.map((s) => (
+              <div key={s.step} className="grid grid-cols-[170px_minmax(0,1fr)_70px_160px] items-center gap-3.5">
+                <span className="font-medium">{sentence(s.step)}</span>
+                <span className="h-2.5 overflow-hidden rounded-[5px] bg-[#EEF1F0]">
+                  <span className={`block h-full rounded-[5px] ${s.ready_to_go_live ? "bg-route" : "bg-signal"}`} style={{ width: `${s.agreement_pct ?? 0}%` }} />
+                </span>
+                <span className="text-right font-semibold tnum">{s.agreement_pct === null ? "—" : `${s.agreement_pct}%`}</span>
+                <span className={`pill justify-self-start ${s.ready_to_go_live ? "bg-go-tint text-go" : "bg-signal-tint text-signal-ink"}`}>{s.ready_to_go_live ? "Ready to go live" : "Keep watching"}</span>
+              </div>
+            ))}
           </div>
         )}
-        <p className="border-t border-rule px-4 py-2 text-2xs text-ink-soft">"Ready" needs at least 5 compared incidents with 80% or more agreement, and reviewers not preferring the person's choice more often than the agent's. Then move that step from Shadow to Needs approval on the policy screen.</p>
-      </Section>
+      </section>
 
-      <div className="flex items-center gap-2">
-        <select className="input w-56" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter">
-          <option value="">All recommendations</option><option value="open">Waiting for people to act</option>
-          <option value="matched">Matched</option><option value="differed">Differed</option><option value="no_action">No action taken</option>
-        </select>
-      </div>
-      {error && <ErrorNote message={error} />}
-      {!data ? <Loading /> : data.length === 0 ? <div className="panel"><Empty title="Nothing here yet" /></div> : (
-        <div className="panel overflow-x-auto">
-          <table className="table">
-            <thead><tr><th>When</th><th>Incident</th><th>Step</th><th>Agent would have</th><th>What people did</th><th>Status</th><th>Review</th></tr></thead>
-            <tbody>{data.map((r) => (
-              <Fragment key={r.id}>
-                <tr className="cursor-pointer align-top hover:bg-paper/60" onClick={() => setOpen(open === r.id ? null : r.id)}>
-                  <td className="whitespace-nowrap text-xs">{ago(r.recommended_at)}</td>
-                  <td><div className="flex items-center gap-1.5"><VehicleId label={r.vehicle_label} /><SeverityTag severity={r.severity ?? null} /></div>
-                    <Link to={`/workflows/${r.workflow_id}`} onClick={(e) => e.stopPropagation()} className="text-2xs text-route hover:underline">{r.workflow_title}</Link></td>
-                  <td className="text-sm">{sentence(r.step)}</td>
-                  <td className="max-w-sm text-xs">{describe(r)}</td>
-                  <td className="max-w-xs text-xs text-ink-soft">
-                    {r.comparison.length > 0 ? r.comparison.map((c, i) => (
-                      <div key={i} className="mb-1">
-                        {r.comparison.length > 1 && <div className="text-2xs font-semibold text-ink">{c.item}</div>}
-                        <div>Agent: <span className="text-ink">{c.agent}</span></div>
-                        <div>Person: <span className="text-ink">{c.person}</span>{c.score !== null && <span className={`ml-1 tnum font-semibold ${c.score >= 75 ? "text-go" : "text-signal"}`}>{c.score}%</span>}</div>
-                      </div>
-                    )) : r.status === "open" ? (
-                      <><div>Waiting for a person to act</div><div className="text-2xs text-ink-faint">{timeLeft(r.no_action_at)}</div></>
-                    ) : r.status === "no_action" ? (
-                      <div>{r.review_note ?? "Nobody did this step within a day"}{r.reviewed_by && r.review_note ? ` (${r.reviewed_by})` : ""}</div>
-                    ) : "—"}
-                    {r.human_actions.length > 0 && <div className="mt-0.5 text-2xs">{r.human_actions.map((h) => `${h.detail}${h.by ? ` (${h.by})` : ""}`).join("; ")}</div>}
-                    {r.agent_ahead_minutes !== null && <div className="mt-0.5 text-2xs text-go">Agent was ready {r.agent_ahead_minutes} min earlier</div>}
-                  </td>
-                  <td><StatusBadge status={r.status} />{r.agreement_pct !== null && <div className="text-2xs tnum text-ink-soft">{r.agreement_pct}% agreement</div>}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    {r.status === "open" && canReview && (
-                      <div className="mb-1.5 flex flex-col gap-1">
-                        {BY_HAND.includes(r.step) && <button className="btn-primary px-2 py-0.5 text-2xs" onClick={() => setActing(acting === r.id ? null : r.id)}>{acting === r.id ? "Close form" : "Do it by hand"}</button>}
-                        <button className="btn-quiet px-2 py-0.5 text-2xs" onClick={() => noAction(r.id)}>No action needed</button>
-                      </div>
-                    )}
-                    {r.status !== "open" && (r.verdict ? <Tag color={r.verdict === "human_better" ? "amber" : "green"}>{r.verdict === "agent_better" ? "Agent better" : r.verdict === "human_better" ? "Person better" : "Same"}</Tag> : canReview && (
-                      <div className="flex flex-col gap-1">
-                        {[["agent_better", "Agent better"], ["same", "Same"], ["human_better", "Person better"]].map(([v, l]) => (
-                          <button key={v} className="btn-quiet px-2 py-0.5 text-2xs" onClick={() => review(r.id, v)}>{l}</button>
-                        ))}
-                      </div>
-                    ))}
-                  </td>
-                </tr>
-                {acting === r.id && <tr><td colSpan={7} className="bg-route-tint/30"><ByHandForm r={r} onDone={() => { setActing(null); reload(); }} /></td></tr>}
-                {open === r.id && <tr><td colSpan={7} className="bg-paper/50"><Json value={{ recommendation: r.recommendation, human_actions: r.human_actions, review: { by: r.reviewed_by, note: r.review_note } }} /></td></tr>}
-              </Fragment>
-            ))}</tbody>
-          </table>
+      <section className="card overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 border-b border-rule px-5 py-4">
+          <h2 className="flex-1 text-sm font-semibold">Comparisons</h2>
+          {FILTERS.map(([v, l]) => (
+            <button key={l} onClick={() => setStatus(v)} className={`h-[30px] rounded-full px-3 text-xs ${status === v ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>{l}</button>
+          ))}
         </div>
-      )}
-    </div>
+        {error && <div className="p-4"><ErrorNote message={error} /></div>}
+        {!data ? <Loading /> : data.length === 0 ? <Empty title="Nothing here yet">Shadow recommendations appear here as the agent runs in shadow mode.</Empty> : data.map((r) => {
+          const isOpen = open === r.id;
+          const v = VERDICT[r.status] ?? VERDICT.open;
+          return (
+            <div key={r.id} className="border-b border-rule-soft last:border-b-0">
+              <button type="button" onClick={() => setOpen(isOpen ? null : r.id)} aria-expanded={isOpen}
+                className="grid w-full grid-cols-[80px_minmax(0,1fr)_170px_90px_150px_20px] items-center gap-3.5 px-5 py-3.5 text-left">
+                <span><VehicleId label={r.vehicle_label} /></span>
+                <span className="min-w-0 truncate font-medium">{r.workflow_title?.replace(`${r.vehicle_label}: `, "") ?? sentence(r.step)}</span>
+                <span className="text-[12.5px] text-ink-soft">{sentence(r.step)}</span>
+                <span className="font-semibold tnum">{r.agreement_pct === null ? "—" : `${r.agreement_pct}%`}</span>
+                <span className={`pill justify-self-start ${v.cls}`}>{v.label}</span>
+                <span className="text-ink-faint">{isOpen ? "▴" : "▾"}</span>
+              </button>
+              {isOpen && (
+                <div className="space-y-3 px-5 pb-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-reason-line bg-reason p-3.5">
+                      <div className="eyebrow text-route-dark">Agent would have</div>
+                      <div className="mt-2 text-[13px]">{describe(r)}</div>
+                      {r.comparison.map((c, i) => <div key={i} className="mt-2 text-[13px]">{r.comparison.length > 1 && <b className="font-medium">{c.item}: </b>}{c.agent}</div>)}
+                      <div className="mt-2 text-xs text-ink-faint">Ready {dayTime(r.recommended_at)} · <SeverityTag severity={r.severity ?? null} /></div>
+                    </div>
+                    <div className="rounded-xl border border-rule bg-[#F6F8F7] p-3.5">
+                      <div className="eyebrow text-ink-soft">People did</div>
+                      {r.comparison.length > 0 ? r.comparison.map((c, i) => (
+                        <div key={i} className="mt-2 text-[13px]">{r.comparison.length > 1 && <b className="font-medium">{c.item}: </b>}{c.person}
+                          {c.score !== null && <span className={`ml-1.5 font-semibold tnum ${c.score >= 75 ? "text-go" : "text-signal-ink"}`}>{c.score}%</span>}</div>
+                      )) : r.human_actions.length > 0 ? r.human_actions.map((h, i) => <div key={i} className="mt-2 text-[13px]">{h.detail}{h.by ? ` (${h.by})` : ""}</div>)
+                        : <div className="mt-2 text-[13px] text-ink-soft">{r.status === "open" ? `Nothing yet · ${timeLeft(r.no_action_at)}` : r.review_note ?? "Nobody did this step within a day"}</div>}
+                      {r.first_human_at && <div className="mt-2 text-xs text-ink-faint">First action {dayTime(r.first_human_at)}{r.agent_ahead_minutes !== null ? ` · agent ready ${r.agent_ahead_minutes} min earlier` : ""}</div>}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Link to={`/workflows/${r.workflow_id}`} className="font-medium">Open the orchestration →</Link>
+                    <span className="flex-1" />
+                    {r.status === "open" && canReview && (<>
+                      {BY_HAND.includes(r.step) && <button className="btn-lg h-9 bg-route px-3.5 text-[13px] text-white" onClick={() => setActing(acting === r.id ? null : r.id)}>{acting === r.id ? "Close form" : "Do it by hand"}</button>}
+                      <button className="btn-lg h-9 border border-rule bg-white px-3.5 text-[13px]" onClick={() => noAction(r.id)}>No action needed</button>
+                    </>)}
+                    {r.status !== "open" && (r.verdict
+                      ? <span className={`pill ${r.verdict === "human_better" ? "bg-signal-tint text-signal-ink" : "bg-go-tint text-go"}`}>Reviewed: {r.verdict === "agent_better" ? "agent better" : r.verdict === "human_better" ? "person better" : "same"}</span>
+                      : canReview && (<>
+                        <span className="text-ink-soft">Which was better?</span>
+                        {[["agent_better", "Agent"], ["same", "Same"], ["human_better", "Person"]].map(([vv, l]) => (
+                          <button key={vv} className="btn-lg h-9 border border-rule bg-white px-3.5 text-[13px]" onClick={() => review(r.id, vv)}>{l}</button>
+                        ))}
+                      </>))}
+                  </div>
+                  {acting === r.id && <div className="rounded-xl border border-rule"><ByHandForm r={r} onDone={() => { setActing(null); reload(); }} /></div>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </section>
+    </>
   );
 }

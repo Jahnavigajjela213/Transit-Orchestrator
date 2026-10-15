@@ -16,7 +16,7 @@ SYSTEM = "rider_comms"
 async def get_rider(s: AsyncSession, tenant_id: str, rider_id: str) -> Rider:
     r = await s.get(Rider, rider_id)
     if not r or r.tenant_id != tenant_id:
-        raise ProductAPIError(SYSTEM, "get_rider", f"Rider {rider_id} not found")
+        raise ProductAPIError(SYSTEM, "get_rider", "That rider is not in rider communications")
     return r
 
 

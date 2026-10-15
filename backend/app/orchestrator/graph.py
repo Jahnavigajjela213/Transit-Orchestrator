@@ -624,6 +624,14 @@ async def exec_return_to_service(state: WorkflowState) -> dict:
 
 
 # ---------------------------------------------------------------- compensation + finish
+def _run_label(state: WorkflowState, run_id: str) -> str:
+    """Route and block of a run in this orchestration, for messages people read."""
+    for r in (state.get("assignments") or []) + ((state.get("assessment") or {}).get("runs_at_risk") or []):
+        if r.get("run_id") == run_id:
+            return f"{r['route_name']} {r['block_name']}"
+    return "the run"
+
+
 async def compensate(state: WorkflowState) -> dict:
     f = state.get("failure") or {}
     if f.get("escalate_only"):
@@ -638,29 +646,31 @@ async def compensate(state: WorkflowState) -> dict:
             if act["action"] == "assign_run":
                 await _delegate(state, rules, step, "trip", "revert_run", lambda ctx, a=act: adapters.trip.revert_run(
                     ctx, run_id=a["run_id"], idempotency_key=f"{state['workflow_id']}:comp:revert:{a['run_id']}"), requires=["trip_mgmt.revert_run"], decision={})
-                done.append({"action": "revert_run", "run_id": act["run_id"]})
+                done.append({"action": "revert_run", "run_id": act["run_id"], "text": f"moved {_run_label(state, act['run_id'])} back to {state['vehicle_label']}"})
             elif act["action"] == "block_vehicle" and comp_rules.get("restore_vehicle_on_reassign_failure", True):
                 await _delegate(state, rules, step, "trip", "restore_vehicle", lambda ctx, a=act: adapters.trip.unblock_vehicle(
                     ctx, ref=a["ref"], reason="Compensation: later step failed", idempotency_key=f"{state['workflow_id']}:comp:unblock"),
                     requires=["trip_mgmt.unblock_vehicle"], decision={})
-                done.append({"action": "restore_vehicle", "vehicle": state["vehicle_label"]})
+                done.append({"action": "restore_vehicle", "vehicle": state["vehicle_label"], "text": f"put {state['vehicle_label']} back on the schedule"})
                 await set_step(state["workflow_id"], "pull_vehicle", "compensated", "Vehicle restored to the schedule after a later step failed")
             elif act["action"] == "open_defect" and wo_cancelled:
                 await _delegate(state, rules, step, "safety", "clear_defect", lambda ctx, a=act: adapters.safety.close_defect(
                     ctx, defect_id=a["defect_id"], resolution="Work order cancelled by compensation",
                     idempotency_key=f"{state['workflow_id']}:comp:close_defect"), requires=["safety.close_defect"], decision={})
-                done.append({"action": "clear_defect", "defect_id": act["defect_id"]})
+                done.append({"action": "clear_defect", "defect_id": act["defect_id"], "text": f"cleared defect {act['defect_id']} in Vestige"})
             elif act["action"] == "create_work_order" and comp_rules.get("cancel_work_order_on_failure", False):
                 await _delegate(state, rules, step, "asset", "cancel_work_order", lambda ctx, a=act: adapters.asset.cancel_work_order(
                     ctx, a["work_order_id"], "Compensation: workflow could not complete"), requires=["asset_mgmt.cancel_work_order"], decision={})
-                done.append({"action": "cancel_work_order", "work_order_id": act["work_order_id"]})
+                done.append({"action": "cancel_work_order", "work_order_id": act["work_order_id"], "text": f"cancelled work order {act['work_order_id']}"})
                 wo_cancelled = True
                 await set_step(state["workflow_id"], "open_work_order", "compensated", "Work order cancelled")
         except Exception as e:
             log.exception("compensation step failed")
-            done.append({"action": f"FAILED {act['action']}", "error": str(e)})
+            done.append({"action": f"FAILED {act['action']}", "error": str(e), "text": f"could not undo {act['action'].replace('_', ' ')} ({e})"})
     kept_wo = state.get("work_order") and not comp_rules.get("cancel_work_order_on_failure", False)
-    expl = (f"{f.get('step', '').replace('_', ' ').capitalize()} failed ({f.get('message')}). Ran {len(done)} compensating step(s) so products stay in sync"
+    undone = "; ".join(d.get("text", d["action"]) for d in done)
+    expl = (f"{f.get('step', '').replace('_', ' ').capitalize()} failed: {f.get('message')}. To keep the products in sync the agent "
+            + (undone if done else "had nothing to undo")
             + (f"; work order {state['work_order']['work_order_id']} kept open for the shop." if kept_wo else "."))
     await _audit(state, record_type="compensation", step=f.get("step"), outcome="compensated", recommendation={"actions": done}, explanation=expl)
     return {"compensation": done}

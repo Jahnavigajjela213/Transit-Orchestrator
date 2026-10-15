@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
 import { useToast } from "../components/Toast";
 import { easternNow, time } from "../lib/format";
-import { ErrorNote, Loading, PageHeader, StatusBadge, Tag, VehicleId, Empty } from "../components/ui";
+import { ErrorNote, Loading, PageHeader, VehicleId, Empty } from "../components/ui";
 
 interface Sched {
   service_date: string;
@@ -54,6 +54,12 @@ function ReassignForm({ run, onDone }: { run: Sched["runs"][number]; onDone: () 
 
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+const STATUS: Record<string, [string, string]> = {
+  reassigned: ["Reassigned", "bg-route-tint text-route-dark"], completed: ["Completed", "bg-go-tint text-go"],
+  in_progress: ["In progress", "bg-shop-tint text-shop"], scheduled: ["Scheduled", "bg-[#EEF1F0] text-ink-soft"],
+};
+const COLS = "grid grid-cols-[minmax(0,1.3fr)_215px_90px_minmax(0,1fr)_80px_120px_90px] items-center gap-3";
+
 export default function Schedule({ embedded = false }: { embedded?: boolean }) {
   const today = easternNow();
   const days = [-1, 0, 1, 2].map((o) => { const d = new Date(today); d.setDate(d.getDate() + o); return d; });
@@ -65,52 +71,56 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
   const { data, error, reload } = useData<Sched>(`/api/schedule?service_date=${day}${changed ? "&only_changed=true" : ""}`, [day, changed]);
 
   return (
-    <div className="fit-page">
+    <div className="flex flex-col gap-3.5">
       {!embedded && <PageHeader title="Schedule" intro="Runs from trip management, with driver names resolved from workforce. Runs the agent moved to a spare are marked." />}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="seg" role="tablist" aria-label="Service day">
+      <div className="flex flex-wrap items-center gap-3">
+        <div role="tablist" aria-label="Service day" className="flex gap-0.5 rounded-[10px] border border-rule bg-white p-[3px]">
           {days.map((d) => (
-            <button key={iso(d)} role="tab" aria-selected={day === iso(d)} onClick={() => setDay(iso(d))}>
+            <button key={iso(d)} role="tab" aria-selected={day === iso(d)} onClick={() => setDay(iso(d))}
+              className={`h-[30px] rounded-[7px] px-3 text-xs ${day === iso(d) ? "bg-ink font-semibold text-white" : "text-ink-soft"}`}>
               {d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}
             </button>
           ))}
         </div>
         {data && <span className="text-xs text-ink-soft tnum">{data.runs.length} runs</span>}
-        <label className="ml-auto inline-flex items-center gap-2 text-sm">
+        <label className="ml-auto inline-flex items-center gap-2 text-[13px] text-ink-soft">
           <input type="checkbox" checked={changed} onChange={(e) => setChanged(e.target.checked)} className="accent-route" /> Only reassigned runs
         </label>
       </div>
       {error && <ErrorNote message={error} />}
-      {!data ? <Loading /> : data.runs.length === 0 ? <div className="panel"><Empty title="No runs match" /></div> : (
-        <div className="panel fit-scroll">
-          <table className="table">
-            <thead><tr><th>Run</th><th>Time</th><th>Vehicle</th><th>Driver</th><th>Riders</th><th>Status</th>{canAssign && <th></th>}</tr></thead>
-            <tbody>
-              {data.runs.map((r) => (
-                <Fragment key={r.run_id}>
-                <tr className={r.reassigned ? "bg-route-tint/40" : ""}>
-                  <td><div className="font-medium">{r.route_name}</div><div className="text-2xs text-ink-soft">{r.block_name}</div></td>
-                  <td className="tnum whitespace-nowrap">{time(r.start)} to {time(r.end)}{r.delay_minutes > 0 && r.status !== "completed" && <div><Tag color={r.delay_minutes > 10 ? "red" : "amber"}>{r.delay_minutes} min late</Tag></div>}</td>
-                  <td>
-                    <VehicleId label={r.vehicle_label} />
-                    {r.reassigned && (
-                      <div className="mt-0.5 text-2xs text-ink-soft">
-                        was <span className="line-through">{r.original_vehicle_label}</span>
-                        {r.workflow_id && <> by <Link to={`/workflows/${r.workflow_id}`} className="text-route hover:underline">orchestration</Link></>}
-                      </div>
+      {!data ? <div className="card"><Loading /></div> : data.runs.length === 0 ? <div className="card"><Empty title="No runs match" /></div> : (
+        <section className="card overflow-hidden">
+          <div className={`${COLS} eyebrow border-b border-rule bg-panel px-[18px] py-3`}>
+            <span>Run</span><span>Time</span><span>Vehicle</span><span>Driver</span><span>Riders</span><span>Status</span><span />
+          </div>
+          {data.runs.map((r) => {
+            const [label, cls] = STATUS[r.reassigned ? "reassigned" : r.status] ?? [r.status, STATUS.scheduled[1]];
+            return (
+              <Fragment key={r.run_id}>
+                <div className={`${COLS} border-b border-rule-soft px-[18px] py-3`}>
+                  <span className="min-w-0 truncate"><b className="font-semibold">{r.route_name}</b> <span className="text-xs text-ink-faint">{r.block_name}</span></span>
+                  <span className="whitespace-nowrap tnum">{time(r.start)} → {time(r.end)}{r.delay_minutes > 0 && r.status !== "completed" && <span className={`ml-1.5 text-[11px] font-semibold ${r.delay_minutes > 10 ? "text-stop" : "text-signal-ink"}`}>+{r.delay_minutes}m</span>}</span>
+                  <span title={r.reassigned && r.original_vehicle_label ? `was ${r.original_vehicle_label}` : undefined}><VehicleId label={r.vehicle_label} /></span>
+                  <span className="min-w-0 truncate" title={r.original_driver_name ? `was ${r.original_driver_name}` : undefined}>{r.driver_name}</span>
+                  <span className="inline-flex items-center gap-1 tnum">{r.riders}
+                    {r.wheelchair_riders > 0 && <span className="inline-flex items-center text-route"><Accessibility className="h-3.5 w-3.5" aria-label="wheelchair riders" />{r.wheelchair_riders}</span>}
+                    {r.standby_riders > 0 && <span className="text-[11px] text-route">+{r.standby_riders}</span>}</span>
+                  <span>
+                    {r.reassigned && r.workflow_id ? <Link to={`/workflows/${r.workflow_id}`} className={`pill no-underline ${cls}`}>{label}</Link> : <span className={`pill ${cls}`}>{label}</span>}
+                  </span>
+                  <span className="text-right">
+                    {canAssign && r.status !== "completed" && (
+                      <button className="h-7 rounded-lg border border-rule bg-white px-2.5 text-[11.5px] text-ink-soft" onClick={() => setEditing(editing === r.run_id ? null : r.run_id)}>
+                        {editing === r.run_id ? "Close" : "Reassign"}
+                      </button>
                     )}
-                  </td>
-                  <td>{r.driver_name}{r.original_driver_name && <div className="text-2xs text-ink-soft">was <span className="line-through">{r.original_driver_name}</span></div>}</td>
-                  <td className="tnum">{r.riders}{r.standby_riders > 0 && <Tag color="teal">+{r.standby_riders} standby</Tag>}{r.wheelchair_riders > 0 && <span className="ml-1.5 inline-flex items-center gap-0.5 text-route"><Accessibility className="h-3.5 w-3.5" aria-label="wheelchair riders" />{r.wheelchair_riders}</span>}</td>
-                  <td>{r.reassigned ? <Tag color="teal">Reassigned</Tag> : <StatusBadge status={r.status} />}</td>
-                  {canAssign && <td>{r.status !== "completed" && <button className="btn-quiet px-2 py-0.5 text-2xs" onClick={() => setEditing(editing === r.run_id ? null : r.run_id)}>{editing === r.run_id ? "Close" : "Reassign"}</button>}</td>}
-                </tr>
-                {editing === r.run_id && <tr><td colSpan={7} className="bg-paper/50"><ReassignForm run={r} onDone={() => { setEditing(null); reload(); }} /></td></tr>}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </span>
+                </div>
+                {editing === r.run_id && <div className="border-b border-rule-soft bg-panel"><ReassignForm run={r} onDone={() => { setEditing(null); reload(); }} /></div>}
+              </Fragment>
+            );
+          })}
+        </section>
       )}
     </div>
   );

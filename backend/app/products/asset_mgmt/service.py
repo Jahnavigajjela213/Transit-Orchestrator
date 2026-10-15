@@ -19,7 +19,7 @@ SYSTEM = "asset_mgmt"
 async def get_asset(s: AsyncSession, tenant_id: str, asset_number: str) -> Asset:
     a = await s.get(Asset, asset_number)
     if not a or a.tenant_id != tenant_id:
-        raise ProductAPIError(SYSTEM, "get_asset", f"Asset {asset_number} not found")
+        raise ProductAPIError(SYSTEM, "get_asset", "That vehicle is not in asset management")
     return a
 
 
@@ -33,6 +33,14 @@ async def fault_code(s: AsyncSession, code: str) -> Optional[FaultCode]:
 
 async def list_fault_codes(s: AsyncSession) -> list[FaultCode]:
     return list((await s.execute(select(FaultCode).order_by(FaultCode.severity, FaultCode.code))).scalars())
+
+
+async def shop_capacity(s: AsyncSession, tenant_id: str, days: int = 4) -> list[ShopCapacity]:
+    """Bays per depot and day, from today (agency time) for `days` days."""
+    start = now().date()
+    q = select(ShopCapacity).where(ShopCapacity.tenant_id == tenant_id, ShopCapacity.day >= start,
+                                   ShopCapacity.day < start + timedelta(days=days))
+    return list((await s.execute(q.order_by(ShopCapacity.day, ShopCapacity.depot))).scalars())
 
 
 async def list_work_orders(s: AsyncSession, tenant_id: str, status: Optional[str] = None, asset_number: Optional[str] = None) -> list[WorkOrder]:

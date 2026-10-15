@@ -39,7 +39,7 @@ async def list_drivers(s: AsyncSession, tenant_id: str) -> list[SafetyDriver]:
 async def get_driver(s: AsyncSession, tenant_id: str, safety_id: str) -> SafetyDriver:
     d = await s.get(SafetyDriver, safety_id)
     if not d or d.tenant_id != tenant_id:
-        raise ProductAPIError(SYSTEM, "get_driver", f"Driver {safety_id} not found in Vestige")
+        raise ProductAPIError(SYSTEM, "get_driver", "That driver is not in Vestige")
     return d
 
 

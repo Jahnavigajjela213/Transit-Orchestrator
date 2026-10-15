@@ -5,16 +5,16 @@ import { sentence } from "../lib/format";
 import type { Delegation, Step } from "../lib/types";
 import LineMap from "./LineMap";
 
-interface AgentInfo {
+export interface AgentInfo {
   key: string; name: string; product: string; role: string; summary: string;
   data: string[]; links: { name: string; url: string }[];
 }
-interface PlanStep { step: string; agents: { key: string; task: string }[] }
-interface AgentsResponse { agents: AgentInfo[]; plans: Record<string, PlanStep[]> }
+export interface PlanStep { step: string; agents: { key: string; task: string }[] }
+export interface AgentsResponse { agents: AgentInfo[]; plans: Record<string, PlanStep[]> }
 
 // The agent catalogue does not change while the app runs: fetch it once and share it.
 let catalogue: Promise<AgentsResponse> | null = null;
-const loadCatalogue = () => (catalogue ??= api.get<AgentsResponse>("/api/agents").catch((e) => { catalogue = null; throw e; }));
+export const loadCatalogue = () => (catalogue ??= api.get<AgentsResponse>("/api/agents").catch((e) => { catalogue = null; throw e; }));
 
 const agentIcon: Record<string, any> = { asset: Wrench, trip: CalendarClock, workforce: Users, safety: HardHat, rider_comms: MessageSquare };
 const agentTone: Record<string, string> = {
