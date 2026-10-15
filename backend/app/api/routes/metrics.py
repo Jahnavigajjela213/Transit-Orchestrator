@@ -1,4 +1,5 @@
 """Success measures from the proposal, computed live from workflows and the audit log."""
+import re
 from datetime import timedelta
 
 from statistics import median
@@ -237,8 +238,14 @@ async def pilot(user: CurrentUser, s: SessionDep, days: Optional[int] = None):
         r = readiness.get(st["step"])
         st["ready"], st["rule"], st["level"] = (r or {}).get("ready", False), (r or {}).get("rule"), (r or {}).get("level")
     base = await baseline_for(s, tid)
+    # How many incidents the baseline rests on (shadow baselines only), so the page can warn when it is too few to trust.
+    sample = base.get("sample")
+    if sample is None and base["source"] == "measured_shadow" and base["notes"]:
+        m = re.search(r"(\d+) shadow", base["notes"])
+        sample = int(m.group(1)) if m else None
     return {"days": days, "measures": current, "weeks": weeks, "steps": steps,
-            "baseline": base["values"], "baseline_source": base["source"], "baseline_notes": base["notes"], "generated_at": t_now}
+            "baseline": base["values"], "baseline_source": base["source"], "baseline_notes": base["notes"],
+            "baseline_sample": sample, "baseline_updated_by": base.get("updated_by"), "generated_at": t_now}
 
 
 async def summary_readiness(s, tid: str) -> list[dict]:

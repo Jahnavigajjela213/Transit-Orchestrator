@@ -190,25 +190,42 @@ export default function Shadow() {
           note={manual === null ? "no data yet" : `per incident, ${metrics?.baseline_source === "measured_shadow" ? "measured in shadow mode" : "baseline"}`} />
       </div>
 
-      <section className="card px-5 py-[18px]">
-        <h2 className="mb-3.5 text-sm font-semibold">Agreement by step</h2>
-        {!summary ? <Loading /> : summary.steps.length === 0 ? (
-          <p className="text-[13px] text-ink-soft">No shadow runs yet. Set the run mode to Shadow on the <Link to="/policies" className="underline">Autonomy policy</Link>, then raise a fault and handle it by hand in the connected systems.</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {summary.steps.map((s) => (
-              <div key={s.step} className="grid grid-cols-[170px_minmax(0,1fr)_70px_160px] items-center gap-3.5">
-                <span className="font-medium">{sentence(s.step)}</span>
-                <span className="h-2.5 overflow-hidden rounded-[5px] bg-[#EEF1F0]">
-                  <span className={`block h-full rounded-[5px] ${s.ready_to_go_live ? "bg-route" : "bg-signal"}`} style={{ width: `${s.agreement_pct ?? 0}%` }} />
-                </span>
-                <span className="text-right font-semibold tnum">{s.agreement_pct === null ? "—" : `${s.agreement_pct}%`}</span>
-                <span className={`pill justify-self-start ${s.ready_to_go_live ? "bg-go-tint text-go" : "bg-signal-tint text-signal-ink"}`}>{s.ready_to_go_live ? "Ready to go live" : "Keep watching"}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      {/* left: agreement per step; right: how many comparisons are in each state (click one to filter the list) */}
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
+        <section className="card px-5 py-4">
+          <h2 className="mb-3 text-sm font-semibold">Agreement by step</h2>
+          {!summary ? <Loading /> : summary.steps.length === 0 ? (
+            <p className="text-[13px] text-ink-soft">No shadow runs yet. Set the run mode to Shadow on the <Link to="/policies" className="underline">Autonomy policy</Link>, then raise a fault and handle it by hand in the connected systems.</p>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {summary.steps.map((s) => (
+                <div key={s.step} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[120px_minmax(0,1fr)_44px_118px]">
+                  <span className="text-[13px] font-medium">{sentence(s.step)}</span>
+                  <span className="h-1.5 overflow-hidden rounded-full bg-[#EEF1F0] max-sm:order-last max-sm:col-span-2">
+                    <span className={`block h-full rounded-full ${s.ready_to_go_live ? "bg-route" : "bg-signal"}`} style={{ width: `${s.agreement_pct ?? 0}%` }} />
+                  </span>
+                  <span className="text-right text-[13px] font-semibold tnum">{s.agreement_pct === null ? "—" : `${s.agreement_pct}%`}</span>
+                  <span className={`pill justify-self-start text-[11px] max-sm:hidden ${s.ready_to_go_live ? "bg-go-tint text-go" : "bg-signal-tint text-signal-ink"}`}>{s.ready_to_go_live ? "Ready to go live" : "Keep watching"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+        <div className="grid grid-cols-2 gap-3.5">
+          {(["open", "matched", "differed", "no_action"] as const).map((k) => {
+            const n = (all || []).filter((r) => r.status === k).length;
+            const on = status === k;
+            return (
+              <button key={k} type="button" onClick={() => setStatus(on ? "" : k)} aria-pressed={on}
+                className={`card flex flex-col justify-center px-5 py-4 text-left transition-colors hover:border-ink-faint ${on ? "ring-2 ring-route" : ""}`}>
+                <span className={`pill self-start text-[11px] ${VERDICT[k].cls}`}>{VERDICT[k].label}</span>
+                <span className="mt-2 text-[28px] font-semibold leading-none tnum">{all ? n : "—"}</span>
+                <span className="mt-1 text-xs text-ink-faint">comparison{n === 1 ? "" : "s"}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-rule px-5 py-4">
@@ -224,7 +241,7 @@ export default function Shadow() {
           return (
             <div key={r.id} className="border-b border-rule-soft last:border-b-0">
               <button type="button" onClick={() => setOpen(isOpen ? null : r.id)} aria-expanded={isOpen}
-                className="grid w-full grid-cols-[80px_minmax(0,1fr)_170px_90px_150px_20px] items-center gap-3.5 px-5 py-3.5 text-left">
+                className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-5 py-3.5 text-left md:grid-cols-[80px_minmax(0,1fr)_170px_90px_150px_20px] md:gap-3.5">
                 <span><VehicleId label={r.vehicle_label} /></span>
                 <span className="min-w-0 truncate font-medium">{r.workflow_title?.replace(`${r.vehicle_label}: `, "") ?? sentence(r.step)}</span>
                 <span className="text-[12.5px] text-ink-soft">{sentence(r.step)}</span>

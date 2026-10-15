@@ -7,6 +7,7 @@ import { useData } from "../lib/live";
 import { useToast } from "../components/Toast";
 import { easternNow, time } from "../lib/format";
 import { ErrorNote, Loading, PageHeader, VehicleId, Empty } from "../components/ui";
+import { Pager, usePaged } from "../components/Pager";
 
 interface Sched {
   service_date: string;
@@ -58,7 +59,7 @@ const STATUS: Record<string, [string, string]> = {
   reassigned: ["Reassigned", "bg-route-tint text-route-dark"], completed: ["Completed", "bg-go-tint text-go"],
   in_progress: ["In progress", "bg-shop-tint text-shop"], scheduled: ["Scheduled", "bg-[#EEF1F0] text-ink-soft"],
 };
-const COLS = "grid grid-cols-[minmax(0,1.3fr)_215px_90px_minmax(0,1fr)_80px_120px_90px] items-center gap-3";
+const COLS = "grid min-w-[900px] grid-cols-[minmax(0,1.3fr)_215px_90px_minmax(0,1fr)_80px_120px_90px] items-center gap-3";
 
 export default function Schedule({ embedded = false }: { embedded?: boolean }) {
   const today = easternNow();
@@ -69,6 +70,7 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
   const canAssign = user?.role === "dispatcher" || user?.role === "admin";
   const [editing, setEditing] = useState<string | null>(null);
   const { data, error, reload } = useData<Sched>(`/api/schedule?service_date=${day}${changed ? "&only_changed=true" : ""}`, [day, changed]);
+  const pg = usePaged(data?.runs, [day, changed]);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -89,11 +91,12 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
       </div>
       {error && <ErrorNote message={error} />}
       {!data ? <div className="card"><Loading /></div> : data.runs.length === 0 ? <div className="card"><Empty title="No runs match" /></div> : (
-        <section className="card overflow-hidden">
-          <div className={`${COLS} eyebrow border-b border-rule bg-panel px-[18px] py-3`}>
+        <>
+        <section className={`card overflow-x-auto ${pg.big ? "max-h-[min(640px,calc(100vh-300px))] overflow-y-auto" : ""}`}>
+          <div className={`${COLS} eyebrow sticky top-0 z-10 border-b border-rule bg-panel px-[18px] py-3`}>
             <span>Run</span><span>Time</span><span>Vehicle</span><span>Driver</span><span>Riders</span><span>Status</span><span />
           </div>
-          {data.runs.map((r) => {
+          {pg.rows.map((r) => {
             const [label, cls] = STATUS[r.reassigned ? "reassigned" : r.status] ?? [r.status, STATUS.scheduled[1]];
             return (
               <Fragment key={r.run_id}>
@@ -121,6 +124,8 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
             );
           })}
         </section>
+        <Pager {...pg} />
+        </>
       )}
     </div>
   );

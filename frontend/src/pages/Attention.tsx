@@ -40,6 +40,9 @@ export default function Attention() {
   const [picked, setPicked] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<DrawerKey | null>(null);
   const [drawerStep, setDrawerStep] = useState<string | null>(null);
+  // The queue and the right-hand drawer take turns: opening one collapses the other, so the decision keeps its room.
+  useEffect(() => { if (drawer) setQueueOpen(false); }, [drawer]);
+  useEffect(() => { if (queueOpen) setDrawer(null); }, [queueOpen]);
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState(false);
   const [override, setOverride] = useState<Record<string, any>>({});
@@ -107,11 +110,8 @@ export default function Attention() {
   const agentNames = (key: string) => (plan.find((p) => p.step === key)?.agents ?? [])
     .map((a) => (cat?.agents.find((x) => x.key === a.key)?.name ?? a.key).replace(" agent", "")).join(" · ");
 
-  return (
-    <>
-      {/* ---------------------------------------------------------------- queue */}
-      {queueOpen && (
-        <section aria-label="Decision queue" className="flex w-[320px] shrink-0 flex-col border-r border-rule bg-white max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:top-14 max-md:z-30 max-md:w-full">
+  const queueFull = (
+    <section aria-label="Decision queue" className="flex h-full w-full flex-col bg-white">
           <div className="flex items-center gap-2 px-[18px] pb-3 pt-[18px]">
             <h2 className="flex-1 text-[15px] font-semibold">Queue <span className="font-medium text-ink-faint">{all.length}</span></h2>
             <button type="button" onClick={() => setQueueOpen(false)} aria-label="Collapse the queue"
@@ -153,11 +153,25 @@ export default function Attention() {
             })}
           </div>
           <p className="border-t border-rule px-[18px] py-3 text-[11px] text-ink-faint">J / K to move · A approve · R reject · C change</p>
-        </section>
-      )}
-      {/* collapsed: a slim strip of the queue's vehicles, still one click from each decision */}
-      {!queueOpen && (
-        <section aria-label="Decision queue, collapsed" className="hidden w-[76px] shrink-0 flex-col items-center border-r border-rule bg-white md:flex">
+    </section>
+  );
+
+  return (
+    <>
+      {/* ---------------------------------------------------------------- queue */}
+      {/* phones: the full queue slides up over the page */}
+      <div aria-hidden={!queueOpen}
+        className={`fixed inset-x-0 bottom-0 top-14 z-30 transition-[opacity,transform,visibility] duration-300 ease-out md:hidden ${queueOpen ? "visible translate-y-0 opacity-100" : "invisible translate-y-4 opacity-0"}`}>
+        {queueFull}
+      </div>
+      {/* tablets and up: one column that eases between the full queue and the strip of vehicles */}
+      <div className={`relative hidden shrink-0 overflow-hidden border-r border-rule bg-white transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] md:block ${queueOpen ? "w-[320px]" : "w-[76px]"}`}>
+        <div aria-hidden={!queueOpen}
+          className={`absolute inset-y-0 left-0 w-[320px] transition-[opacity,visibility] duration-200 ${queueOpen ? "visible opacity-100 delay-100" : "invisible opacity-0"}`}>
+          {queueFull}
+        </div>
+        <section aria-label="Decision queue, collapsed" aria-hidden={queueOpen}
+          className={`absolute inset-y-0 left-0 flex w-[76px] flex-col items-center transition-[opacity,visibility] duration-200 ${queueOpen ? "invisible opacity-0" : "visible opacity-100 delay-100"}`}>
           <button type="button" onClick={() => setQueueOpen(true)} aria-label="Expand the queue" title="Expand the queue"
             className="mt-[18px] flex h-8 w-8 items-center justify-center rounded-lg border border-signal-line bg-signal-tint text-signal-ink hover:border-signal">
             <AlertTriangle className="h-4 w-4" aria-hidden />
@@ -176,7 +190,7 @@ export default function Attention() {
             })}
           </div>
         </section>
-      )}
+      </div>
 
       {/* ---------------------------------------------------------------- focus */}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -340,6 +354,10 @@ const SYSTEM_STATE: Record<string, string> = { done: "Synced", waiting: "In prog
 function ContextDrawer({ open, setOpen, detail, stepKey, cat, ask }: {
   open: DrawerKey | null; setOpen: (k: DrawerKey | null) => void; detail: WorkflowDetail | null; stepKey: string; cat: AgentsResponse | null; ask: ReactNode;
 }) {
+  // Keep showing the last panel while it slides shut, so it doesn't go blank mid-animation.
+  const [shown, setShown] = useState<DrawerKey | null>(open);
+  useEffect(() => { if (open) setShown(open); }, [open]);
+  const view = open ?? shown;
   const delegations: any[] = detail?.context?.delegations || [];
   const stepLabel = detail?.steps.find((s) => s.key === stepKey)?.label ?? sentence(stepKey);
   const plan = cat?.plans.vehicle_health.find((p) => p.step === stepKey);
@@ -361,21 +379,24 @@ function ContextDrawer({ open, setOpen, detail, stepKey, cat, ask }: {
   const riders = (detail?.notifications ?? []).map((n) => ({ title: `${n.rider_name} · ${n.channel} · ${n.language}`, body: n.message, meta: words(n.kind) }));
 
   const tabs: [DrawerKey, string, number | null][] = [["ask", "Ask", null], ["agents", "Agents", plan?.agents.length ?? 0], ["trail", "Trail", trail.length], ["systems", "Systems", 5], ["riders", "Riders", detail?.notification_count ?? 0]];
-  const rows = open === "agents" ? agents : open === "trail" ? trail : open === "systems" ? systems : open === "riders" ? riders : [];
-  const title = open === "agents" ? `Agents · ${stepLabel}` : open === "trail" ? "Decision trail" : open === "systems" ? "Connected systems" : "Rider messages";
+  const rows = view === "agents" ? agents : view === "trail" ? trail : view === "systems" ? systems : view === "riders" ? riders : [];
+  const title = view === "agents" ? `Agents · ${stepLabel}` : view === "trail" ? "Decision trail" : view === "systems" ? "Connected systems" : "Rider messages";
+  // Laptop and up the panel eases its width open beside the tab strip; narrower it slides in over the decision.
+  const lgWidth = open ? (open === "ask" ? "lg:w-[400px]" : "lg:w-[320px]") : "lg:w-0";
 
   return (
     <aside aria-label="Context" className="flex shrink-0 border-l border-rule bg-white">
-      {open && (
-        <div className="flex border-rule bg-white max-lg:absolute max-lg:inset-y-0 max-lg:right-16 max-lg:z-20 max-lg:w-[min(400px,calc(100vw-80px))] max-lg:border-l max-lg:shadow-[-16px_0_40px_-24px_rgba(16,24,40,0.35)] max-md:right-14 max-md:w-[calc(100vw-56px)]">
-      {open === "ask" && ask}
-      {open !== "ask" && (
-        <div className="flex w-full flex-col gap-3.5 overflow-y-auto p-5 lg:w-[320px]">
+      {(
+        <div aria-hidden={!open}
+          className={`flex overflow-hidden border-rule bg-white transition-[width,opacity,transform,visibility] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${lgWidth} max-lg:absolute max-lg:inset-y-0 max-lg:right-16 max-lg:z-20 max-lg:w-[min(400px,calc(100vw-80px))] max-lg:border-l max-lg:shadow-[-16px_0_40px_-24px_rgba(16,24,40,0.35)] max-md:right-14 max-md:w-[calc(100vw-56px)] ${open ? "visible max-lg:translate-x-0 max-lg:opacity-100" : "invisible max-lg:translate-x-6 max-lg:opacity-0"}`}>
+      {view === "ask" && <div className="flex w-full shrink-0 lg:w-[400px]">{ask}</div>}
+      {view && view !== "ask" && (
+        <div className="flex w-full shrink-0 flex-col gap-3.5 overflow-y-auto p-5 lg:w-[320px]">
           <div className="flex items-center">
             <h2 className="flex-1 text-[15px] font-semibold">{title}</h2>
             <button type="button" onClick={() => setOpen(null)} aria-label="Close" className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-[#F1F4F3] text-ink-soft"><X className="h-4 w-4" /></button>
           </div>
-          {!detail ? <Loading /> : rows.length === 0 ? <p className="text-sm text-ink-soft">{open === "riders" ? "Riders are told once their runs move to a spare vehicle (step 6)." : "Nothing here yet."}</p>
+          {!detail ? <Loading /> : rows.length === 0 ? <p className="text-sm text-ink-soft">{view === "riders" ? "Riders are told once their runs move to a spare vehicle (step 6)." : "Nothing here yet."}</p>
             : rows.map((d: any, i) => (
               <div key={i} className="rounded-xl border border-rule px-3.5 py-3">
                 <div className="text-[13px] font-semibold">{d.title}</div>

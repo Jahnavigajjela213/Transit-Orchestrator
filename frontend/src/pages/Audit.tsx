@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Download, X } from "lucide-react";
 import { api } from "../lib/api";
 import { useData } from "../lib/live";
 import { dayTime, seconds, sentence, words } from "../lib/format";
 import type { AuditRecord } from "../lib/types";
-import { Empty, ErrorNote, Json, Loading, PageHeader, VehicleId } from "../components/ui";
+import { Empty, ErrorNote, Json, Loading, PageHeader } from "../components/ui";
 
 const ACTORS: [string, string][] = [["", "Everyone"], ["agent", "Agents"], ["human", "People"], ["product", "Products"]];
 const ACTOR_TONE: Record<string, string> = {
@@ -13,84 +13,93 @@ const ACTOR_TONE: Record<string, string> = {
 };
 const has = (v: unknown) => v !== null && v !== undefined && v !== "" && !(typeof v === "object" && Object.keys(v as object).length === 0);
 
+interface Wf { id: string; vehicle_label: string | null; title: string; detected_at: string }
+const ALL = "_all", NONE = "_none";
+const COLS = "grid min-w-[820px] grid-cols-[140px_170px_260px_minmax(0,1fr)] items-center gap-3.5";
+
 export default function Audit() {
   const [actor, setActor] = useState("");
   const [q, setQ] = useState("");
-  const [closed, setClosed] = useState<Record<string, boolean>>({});
+  const [sel, setSel] = useState<string | null>(null);  // null until the orchestrations load: then the most recent one
   const [picked, setPicked] = useState<string | null>(null);
-  const qs = new URLSearchParams({ limit: "300", ...(actor && { actor_type: actor }), ...(q && { q }) }).toString();
-  const { data, error } = useData<AuditRecord[]>(`/api/audit?${qs}`, [qs]);
-  const { data: wfs } = useData<{ id: string; vehicle_label: string | null; title: string }[]>("/api/workflows?limit=200");
+  const { data: wfs } = useData<Wf[]>("/api/workflows?limit=200");
+  useEffect(() => { if (sel === null && wfs) setSel(wfs[0]?.id ?? ALL); }, [wfs, sel]);
+  const one = sel && sel !== ALL && sel !== NONE ? sel : null;
+  const qs = sel === null ? null : new URLSearchParams({ limit: "300", ...(actor && { actor_type: actor }), ...(q && { q }), ...(one && { workflow_id: one }) }).toString();
+  const { data, error } = useData<AuditRecord[]>(qs === null ? null : `/api/audit?${qs}`, [qs]);
   const { data: m } = useData<{ measures: { audit_complete_pct: number | null } }>("/api/metrics/summary");
   const complete = m?.measures?.audit_complete_pct;
 
-  const byWf = useMemo(() => Object.fromEntries((wfs || []).map((w) => [w.id, w])), [wfs]);
-  // records arrive newest first; keep that order for the groups and oldest-first inside each one, like a trail
-  const groups = useMemo(() => {
-    const out: { id: string; records: AuditRecord[] }[] = [];
-    const idx: Record<string, number> = {};
-    for (const r of data || []) {
-      const k = r.workflow_id ?? "_none";
-      if (idx[k] === undefined) { idx[k] = out.length; out.push({ id: k, records: [] }); }
-      out[idx[k]].records.push(r);
-    }
-    out.forEach((g) => g.records.reverse());
-    return out;
-  }, [data]);
-  const rec = (data || []).find((r) => r.id === picked) ?? null;
+  // One entry per orchestration; a vehicle that had more than one gets the detection time so they can be told apart.
+  const options = useMemo(() => {
+    const per: Record<string, number> = {};
+    for (const w of wfs || []) per[w.vehicle_label ?? ""] = (per[w.vehicle_label ?? ""] ?? 0) + 1;
+    return (wfs || []).map((w) => ({
+      id: w.id,
+      label: [w.vehicle_label, w.title.replace(`${w.vehicle_label}: `, ""), per[w.vehicle_label ?? ""] > 1 ? dayTime(w.detected_at) : null].filter(Boolean).join(" · "),
+    }));
+  }, [wfs]);
+  const rows = useMemo(() => {
+    const list = (data || []).filter((r) => sel !== NONE || !r.workflow_id);
+    return one ? [...list].reverse() : list;  // one orchestration reads as a trail, oldest first; everything else newest first
+  }, [data, sel, one]);
+  const rec = rows.find((r) => r.id === picked) ?? null;
 
   return (
-    <div className="-my-[26px] flex min-h-[calc(100vh)] gap-0 lg:-mr-8">
-      <div className="flex min-w-0 flex-1 flex-col gap-4 py-[26px] lg:pr-8">
-        <PageHeader title="Audit log" eyebrow="Governance · mirrored to Databricks (Delta)"
-          intro="Every event, decision, approval and action, with the evidence behind it."
-          actions={<button className="btn-lg h-10 border border-rule bg-white px-3.5 text-[13px]" onClick={() => api.download("/api/audit/export?format=jsonl", "audit_log.jsonl")}>
-            <Download className="h-4 w-4" aria-hidden /> Export JSONL</button>} />
+    <div className="flex flex-col gap-4">
+      <PageHeader intro="Every event, decision, approval and action, with the evidence behind it. Mirrored to Databricks (Delta)."
+        actions={<button className="btn-lg h-10 border border-rule bg-white px-3.5 text-[13px]" onClick={() => api.download(`/api/audit/export?format=jsonl${one ? `&workflow_id=${one}` : ""}`, one ? `audit_${one}.jsonl` : "audit_log.jsonl")}>
+          <Download className="h-4 w-4" aria-hidden /> Export JSONL</button>} />
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {ACTORS.map(([v, l]) => (
-            <button key={l} onClick={() => setActor(v)} className={`h-[34px] rounded-full px-3.5 text-[12.5px] ${actor === v ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>{l}</button>
-          ))}
-          <label className="ml-2">
-            <span className="sr-only">Search explanations</span>
-            <input className="input h-[34px] w-60 rounded-full" placeholder="Search explanations" value={q} onChange={(e) => setQ(e.target.value)} />
-          </label>
-          <span className="flex-1" />
-          {complete != null && <span className="text-xs text-ink-faint">{complete}% of decisions have a complete record</span>}
-        </div>
+      <div className="flex items-start gap-4">
+        <section className="card flex min-w-0 flex-1 flex-col overflow-hidden">
+          {/* toolbar: who acted and search on the left, which orchestration on the right */}
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-rule px-4 py-3">
+            {ACTORS.map(([v, l]) => (
+              <button key={l} onClick={() => setActor(v)} className={`h-[34px] rounded-full px-3.5 text-[12.5px] ${actor === v ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>{l}</button>
+            ))}
+            <label className="ml-1">
+              <span className="sr-only">Search explanations</span>
+              <input className="input h-[34px] w-52 rounded-full" placeholder="Search explanations" value={q} onChange={(e) => setQ(e.target.value)} />
+            </label>
+            <span className="flex-1" />
+            <label className="flex min-w-[260px] max-w-full items-center gap-2 text-xs text-ink-soft">
+              <span className="shrink-0">Orchestration</span>
+              <select value={sel ?? ""} onChange={(e) => { setSel(e.target.value); setPicked(null); }} className="input h-[34px] min-w-0 flex-1 text-[13px] text-ink">
+                <option value={ALL}>All orchestrations</option>
+                {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                <option value={NONE}>Not tied to an orchestration</option>
+              </select>
+            </label>
+            {one && <Link to={`/workflows/${one}`} className="text-xs font-medium">Open</Link>}
+          </div>
 
-        {error && <ErrorNote message={error} />}
-        {!data ? <div className="card"><Loading /></div> : groups.length === 0 ? <div className="card"><Empty title="No records match" /></div> : groups.map((g) => {
-          const wf = byWf[g.id];
-          const open = !closed[g.id];
-          return (
-            <section key={g.id} className="card overflow-hidden">
-              <button type="button" onClick={() => setClosed({ ...closed, [g.id]: open })} aria-expanded={open}
-                className="flex w-full items-center gap-2.5 bg-panel px-[18px] py-3.5 text-left">
-                {wf ? <VehicleId label={wf.vehicle_label} /> : null}
-                <span className="min-w-0 flex-1 truncate font-semibold">
-                  {wf ? wf.title.replace(`${wf.vehicle_label}: `, "") : g.id === "_none" ? "Not tied to an orchestration (policy changes, assistant, system)" : `Orchestration ${g.id}`}
-                </span>
-                {wf && <Link to={`/workflows/${g.id}`} onClick={(e) => e.stopPropagation()} className="text-xs font-medium">Open</Link>}
-                <span className="text-xs text-ink-soft">{g.records.length} records</span>
-                <span className="text-ink-faint">{open ? "▴" : "▾"}</span>
-              </button>
-              {open && g.records.map((r) => (
-                <button key={r.id} type="button" onClick={() => setPicked(r.id)}
-                  className={`grid w-full grid-cols-[80px_160px_250px_minmax(0,1fr)] items-center gap-3.5 border-t border-rule-soft px-[18px] py-3 text-left ${picked === r.id ? "bg-[#F1F7F6]" : "bg-white hover:bg-panel"}`}>
-                  <span className="font-mono text-xs text-ink-faint">{seconds(r.created_at)}</span>
+          {error && <div className="p-4"><ErrorNote message={error} /></div>}
+          {!data ? <Loading /> : rows.length === 0 ? <Empty title="No records match" /> : (
+            <div className="max-h-[calc(100vh-270px)] min-h-[240px] overflow-auto">
+              <div className={`${COLS} eyebrow sticky top-0 z-10 border-b border-rule bg-panel px-[18px] py-2.5`}>
+                <span>Time</span><span>Actor</span><span>Record</span><span>Explanation</span>
+              </div>
+              {rows.map((r) => (
+                <button key={r.id} type="button" onClick={() => setPicked(r.id)} aria-pressed={picked === r.id}
+                  className={`${COLS} w-full border-b border-rule-soft px-[18px] py-3 text-left ${picked === r.id ? "bg-[#F1F7F6]" : "bg-white hover:bg-panel"}`}>
+                  <span className="text-xs text-ink-faint tnum">{one ? seconds(r.created_at) : dayTime(r.created_at)}</span>
                   <span className={`pill justify-self-start text-[11.5px] ${ACTOR_TONE[r.actor_type] ?? ACTOR_TONE.system}`}>{r.actor}</span>
                   <span className="truncate font-semibold">{sentence(r.record_type)}{r.step ? <span className="font-normal text-ink-faint"> · {words(r.step)}</span> : null}</span>
                   <span className="truncate text-ink-soft">{r.explanation}</span>
                 </button>
               ))}
-            </section>
-          );
-        })}
-      </div>
+            </div>
+          )}
+          <div className="flex items-center gap-3 border-t border-rule px-[18px] py-2.5 text-xs text-ink-faint">
+            <span className="tnum">{rows.length} record{rows.length === 1 ? "" : "s"}{(data?.length ?? 0) >= 300 ? " (latest 300)" : ""}</span>
+            <span className="flex-1" />
+            {complete != null && <span>{complete}% of decisions have a complete record</span>}
+          </div>
+        </section>
 
       {rec && (
-        <aside aria-label="Record" className="sticky top-0 flex h-screen w-[380px] shrink-0 flex-col gap-3.5 overflow-y-auto border-l border-rule bg-white p-[22px]">
+        <aside aria-label="Record" className="flex flex-col gap-3.5 overflow-y-auto bg-white p-[22px] max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:w-full max-lg:max-w-[420px] max-lg:border-l max-lg:border-rule max-lg:shadow-[-16px_0_40px_-16px_rgba(16,24,40,0.4)] lg:max-h-[calc(100vh-170px)] lg:w-[380px] lg:shrink-0 lg:rounded-[14px] lg:border lg:border-rule">
           <div className="flex items-start">
             <div className="flex-1">
               <div className="eyebrow">{dayTime(rec.created_at)} · {rec.actor}</div>
@@ -118,6 +127,7 @@ export default function Audit() {
           </dl>
         </aside>
       )}
+      </div>
     </div>
   );
 }

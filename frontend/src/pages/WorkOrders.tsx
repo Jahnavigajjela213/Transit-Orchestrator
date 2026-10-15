@@ -12,13 +12,13 @@ interface WO {
   source: string; shop_depot: string | null; shop_start: string | null; shop_end: string | null; external_ref: string | null;
   created_by: string; created_at: string; closed_at: string | null; closed_by: string | null; resolution: string | null;
 }
-interface Bay { day: string; depot: string; bays_total: number; bays_booked: number }
 
 const PRIO: Record<string, string> = { critical: "bg-stop-tint text-stop", high: "bg-signal-tint text-signal-ink", medium: "bg-route-tint text-route-dark", low: "bg-[#EEF1F0] text-ink-soft" };
-const LANES: { key: "open" | "in_progress" | "closed"; title: string; dot: string }[] = [
-  { key: "open", title: "Waiting for the shop", dot: "bg-signal" },
-  { key: "in_progress", title: "In progress", dot: "bg-shop" },
-  { key: "closed", title: "Closed today", dot: "bg-go" },
+// The first lane names its contents: "Work order" for one, "Work orders" otherwise. Each heading carries a count pill in its lane's tone.
+const LANES: { key: "open" | "in_progress" | "closed"; title: (n: number) => string; dot: string; pill: string }[] = [
+  { key: "open", title: (n) => (n === 1 ? "Work order" : "Work orders"), dot: "bg-signal", pill: "bg-signal text-white" },
+  { key: "in_progress", title: () => "In progress", dot: "bg-shop", pill: "bg-shop text-white" },
+  { key: "closed", title: () => "Closed today", dot: "bg-go", pill: "bg-go text-white" },
 ];
 // The list is read from Databricks, which trails maintenance by several seconds: what the shop just did wins until it catches up.
 const RANK: Record<string, number> = { open: 0, in_progress: 1, closed: 2, cancelled: 2 };
@@ -38,10 +38,8 @@ export default function WorkOrders() {
   const toast = useToast();
   const { data, error } = useData<WO[]>("/products/asset-mgmt/work-orders");
   const { data: assets } = useData<{ asset_number: string; unit_label: string }[]>("/products/asset-mgmt/assets");
-  const { data: bays } = useData<Bay[]>("/products/asset-mgmt/shop-capacity?days=4");
   const label = Object.fromEntries((assets || []).map((a) => [a.asset_number, a.unit_label]));
   const isShop = user?.role === "shop_manager" || user?.role === "admin";
-  const [baysOpen, setBaysOpen] = useState(true);
   const [done, setDone] = useState<Record<string, WO>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -57,20 +55,6 @@ export default function WorkOrders() {
     }));
   }, [data, done, today]);
 
-  const days = useMemo(() => {
-    const by = new Map<string, { booked: number; total: number }>();
-    for (const b of bays || []) {
-      const d = by.get(b.day) ?? { booked: 0, total: 0 };
-      d.booked += b.bays_booked; d.total += b.bays_total;
-      by.set(b.day, d);
-    }
-    return [...by.entries()].map(([day, v]) => ({ day, ...v }));
-  }, [bays]);
-  const depots = useMemo(() => {
-    const first = bays?.[0]?.day;
-    return (bays || []).filter((b) => b.day === first).map((b) => `${b.depot} ${b.bays_total} bay${b.bays_total === 1 ? "" : "s"}`).join(" · ");
-  }, [bays]);
-
   async function act(wo: WO, action: "start" | "close") {
     setBusy(wo.id);
     try {
@@ -82,22 +66,20 @@ export default function WorkOrders() {
 
   return (
     <>
-      <PageHeader eyebrow="Work orders · FASTER" title="Maintenance"
-        intro="Start work first, then close it. Closing an agent-opened work order returns the vehicle to the schedule automatically."
-        actions={<button type="button" onClick={() => setBaysOpen(!baysOpen)} className="h-10 rounded-[10px] border border-rule bg-white px-3.5 text-[13px]">{baysOpen ? "Hide shop bays" : "Show shop bays"}</button>} />
+      <PageHeader intro="Start work first, then close it. Closing an agent-opened work order returns the vehicle to the schedule automatically." />
 
       {error && <ErrorNote message={error} />}
       {!data ? <div className="card"><Loading /></div> : (
-        <div className="flex min-h-0 gap-4">
-          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3.5 md:grid-cols-3">
+        // From tablet width up the board fills the window and each lane scrolls inside itself.
+        <div className="grid min-w-0 grid-cols-1 gap-3.5 md:min-h-0 md:flex-1 md:grid-cols-3 md:grid-rows-[minmax(0,1fr)]">
             {lanes.map((lane) => (
-              <section key={lane.key} className="flex min-h-[520px] flex-col rounded-[14px] border border-rule bg-[#ECEFEE]">
-                <div className="flex items-center gap-2 px-4 pb-2.5 pt-3.5">
+              <section key={lane.key} className="flex min-h-[240px] flex-col rounded-[14px] border border-rule bg-[#ECEFEE] md:min-h-0">
+                <div className="flex shrink-0 items-center gap-2 px-4 pb-2.5 pt-3.5">
                   <span className={`h-2 w-2 rounded-full ${lane.dot}`} aria-hidden />
-                  <h2 className="flex-1 text-sm font-semibold">{lane.title}</h2>
-                  <span className="text-xs text-ink-faint tnum">{lane.cards.length}</span>
+                  <h2 className="text-sm font-semibold">{lane.title(lane.cards.length)}</h2>
+                  <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tnum ${lane.pill}`}>{lane.cards.length}</span>
                 </div>
-                <div className="flex flex-col gap-2.5 px-3 pb-3.5">
+                <div className="flex flex-col gap-2.5 px-3 pb-3.5 md:min-h-0 md:flex-1 md:overflow-y-auto">
                   {lane.cards.length === 0 && <span className="px-1 py-2.5 text-xs text-[#9AA4AB]">Nothing here</span>}
                   {lane.cards.map((w) => (
                     <article key={w.id} className="rounded-xl border border-rule bg-white p-3.5">
@@ -130,25 +112,6 @@ export default function WorkOrders() {
                 </div>
               </section>
             ))}
-          </div>
-
-          {baysOpen && (
-            <aside aria-label="Shop bays" className="flex h-fit w-[300px] shrink-0 flex-col gap-3.5 rounded-[14px] border border-rule bg-white p-[18px]">
-              <h2 className="text-sm font-semibold">Shop bays · next {days.length || 4} days</h2>
-              {!bays ? <Loading /> : days.map((d) => (
-                <div key={d.day}>
-                  <div className="flex text-[12.5px]">
-                    <span className="flex-1 font-medium">{`${wd(`${d.day}T12:00:00`)} ${Number(d.day.slice(8))}`}</span>
-                    <span className="text-ink-soft tnum">{d.booked} of {d.total} booked</span>
-                  </div>
-                  <div className="mt-1.5 flex gap-1" aria-hidden>
-                    {Array.from({ length: d.total }, (_, i) => <span key={i} className={`h-2.5 flex-1 rounded-[3px] ${i < d.booked ? "bg-route" : "bg-rule"}`} />)}
-                  </div>
-                </div>
-              ))}
-              <p className="text-xs leading-relaxed text-ink-faint">{depots ? `${depots}. ` : ""}The asset agent books the first free bay that fits the repair.</p>
-            </aside>
-          )}
         </div>
       )}
     </>

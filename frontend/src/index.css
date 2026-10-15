@@ -31,7 +31,8 @@
 
   --font-sign: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* One typeface across the app: codes and IDs use IBM Plex Sans too (tabular figures keep them aligned). */
+  --font-mono: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -99,7 +100,7 @@
   /* Concept-canvas building blocks */
   .card { @apply rounded-[14px] border border-rule bg-white; }
   .eyebrow { @apply text-[11px] uppercase tracking-[0.08em] text-ink-faint; }
-  .chip-v { @apply inline-flex items-center whitespace-nowrap rounded-[5px] bg-ink px-1.5 py-0.5 font-mono text-[11px] font-medium text-white; }
+  .chip-v { @apply inline-flex items-center whitespace-nowrap rounded-[5px] bg-ink px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white; }
   .pill { @apply inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold; }
   .btn-lg { @apply inline-flex h-11 items-center justify-center gap-1.5 rounded-[10px] px-[18px] text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50; }
   .count { @apply rounded-full bg-paper px-1.5 py-px text-[11px] font-semibold text-ink-soft tabular-nums; }
@@ -126,3 +127,8 @@
 }
 .dot-wave { animation: dot-wave 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .dot-wave { animation: none; } }
+
+/* People who ask their system for less motion get instant panels instead of slides. */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

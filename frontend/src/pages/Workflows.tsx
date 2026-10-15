@@ -56,10 +56,9 @@ export default function Workflows() {
 
   return (
     <>
-      <header className="flex flex-wrap items-end gap-4">
-        <div className="min-w-[280px] flex-1">
-          <h1 className="text-2xl font-semibold tracking-[-0.01em]">Orchestrations</h1>
-          <p className="mt-1.5 text-ink-soft">Every vehicle fault the agent picked up, and where it stands on its seven steps.</p>
+      <header className="flex flex-wrap items-center gap-4">
+        <div className="min-w-[260px] flex-1">
+          <p className="text-ink-soft">Every vehicle fault the agent picked up, and where it stands on its seven steps.</p>
         </div>
         <div role="tablist" aria-label="View" className="flex rounded-[10px] border border-rule bg-white p-[3px]">
           {(["list", "board"] as const).map((v) => (
@@ -81,7 +80,7 @@ export default function Workflows() {
           ))}
         </div>
         <span className="flex-1" />
-        <label className="relative w-[280px]">
+        <label className="relative w-full sm:w-[280px]">
           <span className="sr-only">Search</span>
           <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search vehicle or fault"
             className="h-10 w-full rounded-[10px] border border-rule bg-white pl-9 pr-3 focus:border-route focus:outline-hidden" />

@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Bell, ClipboardList, Eye, FlaskConical, GitBranch, LogOut, Menu, PanelLeft, ShieldCheck, Wrench, X } from "lucide-react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { BarChart3, Bell, ChevronRight, ClipboardList, Eye, FlaskConical, GitBranch, LogOut, Menu, PanelLeft, ShieldCheck, Wrench, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
-import { useData } from "../lib/live";
-import { roleName } from "../lib/format";
+import { useData, useLive } from "../lib/live";
+import { CrumbsContext, type Crumb } from "../lib/topbar";
+import { clockET, roleName } from "../lib/format";
 import type { Approval } from "../lib/types";
 
 // The module rail of the concepts canvas: every module is always listed as an icon; expanding adds the names.
@@ -46,6 +47,10 @@ export default function Layout() {
   const count = wfs ? (pending || []).filter((a) => ids.has(a.workflow_id)).length : 0;
   const Label = ({ children }: { children: ReactNode }) => (open ? <span className="flex-1 truncate">{children}</span> : null);
   const home = pathname === "/";
+  const [crumbs, setCrumbs] = useState<Crumb[] | null>(null);
+  const page = groups.flat().find((it) => (it.to === "/" ? home : pathname.startsWith(it.to)));
+  // Screens that fit the window from tablet width up: the page stays put and their panels scroll inside themselves.
+  const fit = ["/work-orders"].includes(pathname);
 
   return (
     <div className="flex h-[100dvh] flex-col bg-paper text-ink md:flex-row">
@@ -120,14 +125,44 @@ export default function Layout() {
         </div>
       </nav>
 
-      {/* The Focus Queue fills the window and lays itself out; the other screens scroll inside main. */}
-      {home ? (
-        <main className="flex min-h-0 min-w-0 flex-1"><Outlet /></main>
-      ) : (
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-[1640px] flex-col gap-[18px] px-4 py-5 sm:px-6 lg:px-8 lg:py-[26px]"><Outlet /></div>
-        </main>
-      )}
+      {/* The Focus Queue fills the window and draws its own top bar; the other screens get the same bar here and scroll below it. */}
+      <CrumbsContext.Provider value={setCrumbs}>
+        {home ? (
+          <main className="flex min-h-0 min-w-0 flex-1"><Outlet /></main>
+        ) : (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <TopBar crumbs={crumbs ?? [{ label: page?.label ?? "TransitTechOS" }]} agency={user?.tenant_name} />
+            <main className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${fit ? "md:flex md:flex-col md:overflow-hidden" : ""}`}>
+              <div className={`mx-auto flex w-full max-w-[1640px] flex-col gap-[18px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6 ${fit ? "md:min-h-0 md:flex-1" : ""}`}><Outlet /></div>
+            </main>
+          </div>
+        )}
+      </CrumbsContext.Provider>
     </div>
+  );
+}
+
+/** The bar along the top of every screen, the same as the Needs your attention header: where you are, the time (ET), live state, agency. */
+export function TopBar({ crumbs, agency }: { crumbs: Crumb[]; agency?: string }) {
+  const { connected } = useLive();
+  const [clock, setClock] = useState(clockET());
+  useEffect(() => { const id = window.setInterval(() => setClock(clockET()), 15000); return () => window.clearInterval(id); }, []);
+  return (
+    <header className="hidden h-14 shrink-0 items-center gap-3 border-b border-rule bg-white px-6 md:flex">
+      {crumbs.map((c, i) => {
+        const last = i === crumbs.length - 1;
+        return (
+          <span key={i} className="flex min-w-0 items-center gap-3">
+            {i > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />}
+            {c.to && !last ? <Link to={c.to} className="truncate text-ink-faint hover:text-ink">{c.label}</Link>
+              : <span className={`truncate ${last && crumbs.length > 1 ? "font-semibold" : last ? "font-semibold" : "text-ink-faint"}`}>{c.label}</span>}
+          </span>
+        );
+      })}
+      <span className="flex-1" />
+      <span className="hidden text-xs text-ink-soft tnum sm:inline" title="All times are US Eastern">{clock} ET</span>
+      <span className="flex items-center gap-1.5 text-xs text-ink-soft"><span className={`h-2 w-2 rounded-full ${connected ? "bg-go" : "bg-stop"}`} aria-hidden />{connected ? "Live" : "Reconnecting"}</span>
+      {agency && <span className="hidden rounded-full bg-[#EEF1F0] px-2.5 py-1 text-xs text-ink-soft lg:inline">{agency}</span>}
+    </header>
   );
 }

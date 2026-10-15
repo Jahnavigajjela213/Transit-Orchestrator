@@ -79,7 +79,7 @@ export default function Policies() {
         <div role="radiogroup" aria-label="Run mode" className="flex rounded-[10px] border border-rule p-[3px]">
           {(data.meta.modes.length ? data.meta.modes : ["live", "shadow"]).map((m) => (
             <button key={m} type="button" role="radio" aria-checked={mode === m} disabled={!isAdmin} onClick={() => setRules({ ...rules, mode: m })}
-              className={`${SEG} px-[18px] ${mode === m ? (m === "shadow" ? "bg-route text-white" : "bg-go text-white") : "text-ink-soft"}`}>
+              className={`${SEG} ${mode === m ? "bg-route text-white" : "text-ink-soft"}`}>
               {m === "live" ? "Live" : "Shadow"}
             </button>
           ))}
@@ -92,8 +92,8 @@ export default function Policies() {
       </section>
 
       {/* steps */}
-      <section className="card overflow-hidden">
-        <div className="grid grid-cols-[40px_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_120px] gap-3.5 border-b border-rule bg-panel px-5 py-3 text-[11px] uppercase tracking-[0.08em] text-ink-faint">
+      <section className="card overflow-x-auto">
+        <div className="grid min-w-[820px] grid-cols-[40px_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_120px] gap-3.5 border-b border-rule bg-panel px-5 py-3 text-[11px] uppercase tracking-[0.08em] text-ink-faint">
           <span /><span>Step</span><span>Level</span><span>Who approves</span><span />
         </div>
         {data.meta.steps.map((s, i) => {
@@ -102,14 +102,14 @@ export default function Policies() {
           const rd = readiness[s.key];
           const levels = LEVEL_ORDER.filter((l) => data.meta.levels.includes(l) && (l !== "shadow" || cfg.level === "shadow"));
           return (
-            <div key={s.key} className="border-b border-rule-soft last:border-b-0">
+            <div key={s.key} className="min-w-[820px] border-b border-rule-soft last:border-b-0">
               <div className="grid grid-cols-[40px_minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_120px] items-center gap-3.5 px-5 py-3.5">
                 <span className="font-mono text-xs text-ink-faint">{String(i + 1).padStart(2, "0")}</span>
                 <span>
                   <span className="block font-semibold">{s.label}</span>
                   <span className="mt-0.5 block text-xs text-ink-soft">{s.description}</span>
                   {rd?.ready && cfg.level !== "autonomous" && (
-                    <span className="mt-1.5 inline-block rounded-full bg-go-tint px-2 py-0.5 text-[11.5px] text-go">
+                    <span className="mt-1.5 block w-fit rounded-lg bg-go-tint px-2.5 py-1.5 text-left text-[12px] leading-snug text-go">
                       {rd.acceptance_pct}% approved unchanged in 28 days ({rd.decisions_28d} decisions) · ready for Agent acts
                     </span>
                   )}
@@ -176,9 +176,9 @@ export default function Policies() {
   );
 }
 
-function Sub({ title, children, note }: { title: string; children: React.ReactNode; note?: React.ReactNode }) {
+function Sub({ title, children, note, wide = true }: { title: string; children: React.ReactNode; note?: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="border-t border-rule px-5 py-4">
+    <div className={`min-w-0 rounded-xl border border-rule bg-white p-5 ${wide ? "lg:col-span-2" : ""}`}>
       <h3 className="mb-3 text-[13px] font-semibold">{title}</h3>
       {children}
       {note && <p className="mt-3 text-xs text-ink-faint">{note}</p>}
@@ -189,7 +189,7 @@ function Sub({ title, children, note }: { title: string; children: React.ReactNo
 function Advanced({ data, rules, setRules, setStep, isAdmin }: { data: Pol; rules: any; setRules: (r: any) => void; setStep: (k: string, p: any) => void; isAdmin: boolean }) {
   const steps = data.meta.steps.filter((s) => !FIXED.includes(s.key));
   return (
-    <>
+    <div className="grid grid-cols-1 gap-4 border-t border-rule bg-panel p-4 lg:grid-cols-2">
       <Sub title="Approvers and personas" note="Operations admins can decide any step. When a person approves, the agent acts with that person's permissions; when it acts on its own it uses the persona chosen here.">
         <div className="overflow-x-auto">
           <table className="table">
@@ -224,9 +224,7 @@ function Advanced({ data, rules, setRules, setStep, isAdmin }: { data: Pol; rule
         </div>
       </Sub>
 
-      <div className="grid border-t border-rule lg:grid-cols-2">
-        <div className="px-5 py-4">
-          <h3 className="mb-3 text-[13px] font-semibold">Thresholds</h3>
+      <Sub title="Thresholds" wide={false}>
           <div className="grid gap-2.5">
             {Object.entries(rules.thresholds).map(([k, v]) => (
               <label key={k} className="grid grid-cols-[1fr_110px] items-center gap-3 text-[13px]">
@@ -236,9 +234,8 @@ function Advanced({ data, rules, setRules, setStep, isAdmin }: { data: Pol; rule
               </label>
             ))}
           </div>
-        </div>
-        <div className="border-t border-rule px-5 py-4 lg:border-l lg:border-t-0">
-          <h3 className="mb-3 text-[13px] font-semibold">When a step fails</h3>
+      </Sub>
+      <Sub title="When a step fails" wide={false}>
           <div className="space-y-2 text-[13px]">
             {Object.keys(rules.compensation).map((k) => (
               <label key={k} className="flex items-start gap-2">
@@ -248,8 +245,7 @@ function Advanced({ data, rules, setRules, setStep, isAdmin }: { data: Pol; rule
               </label>
             ))}
           </div>
-        </div>
-      </div>
+      </Sub>
 
       <Sub title="What the agent may do in products" note="Removing a permission makes that step fail safely and escalate to a person, even if the step is set to Agent acts.">
         <div className="grid gap-1 text-[13px] sm:grid-cols-2 xl:grid-cols-3">
@@ -257,7 +253,7 @@ function Advanced({ data, rules, setRules, setStep, isAdmin }: { data: Pol; rule
             <label key={p} className="inline-flex items-center gap-2">
               <input type="checkbox" className="accent-route" disabled={!isAdmin} checked={rules.agent_permissions.includes(p)}
                 onChange={(e) => setRules({ ...rules, agent_permissions: e.target.checked ? [...rules.agent_permissions, p] : rules.agent_permissions.filter((x: string) => x !== p) })} />
-              <code className="font-mono text-xs">{p}</code>
+              <span className="text-[13px]">{actionName(p)}</span>
             </label>
           ))}
         </div>
@@ -270,13 +266,13 @@ function Advanced({ data, rules, setRules, setStep, isAdmin }: { data: Pol; rule
             <tbody>
               {data.meta.persona_permission_options.map((perm) => (
                 <tr key={perm}>
-                  <td><code className="font-mono text-xs">{perm}</code></td>
+                  <td className="text-[13px]">{actionName(perm)}</td>
                   {data.meta.personas.map((r) => {
                     const list: string[] = rules.persona_permissions?.[r] ?? [];
                     const all = list.includes("*");
                     return (
                       <td key={r} className="text-center">
-                        <input type="checkbox" className="accent-route" aria-label={`${roleName[r]} may ${perm}`} disabled={!isAdmin || all} checked={all || list.includes(perm)}
+                        <input type="checkbox" className="accent-route" aria-label={`${roleName[r]} may ${actionName(perm)}`} disabled={!isAdmin || all} checked={all || list.includes(perm)}
                           onChange={(e) => setRules({ ...rules, persona_permissions: { ...rules.persona_permissions, [r]: e.target.checked ? [...list, perm] : list.filter((x) => x !== perm) } })} />
                       </td>
                     );
@@ -318,6 +314,16 @@ function Advanced({ data, rules, setRules, setStep, isAdmin }: { data: Pol; rule
           </div>
         </Sub>
       )}
-    </>
+    </div>
   );
+}
+
+// Permissions are stored as "product.action" keys; people read them as "Cancel work order · FASTER".
+const PRODUCT_NAME: Record<string, string> = {
+  asset_mgmt: "FASTER", trip_mgmt: "TripMaster", workforce: "Bytecurve", safety: "Vestige", rider_comms: "TripShot", telematics: "Telematics",
+};
+function actionName(key: string): string {
+  const [product, action = ""] = key.split(".");
+  const words = action.replace(/_/g, " ").replace("eta", "ETA");
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)} · ${PRODUCT_NAME[product] ?? product.replace(/_/g, " ")}`;
 }

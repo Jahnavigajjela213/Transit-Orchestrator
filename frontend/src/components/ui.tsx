@@ -52,13 +52,14 @@ export function VehicleId({ label, size = "md" }: { label: string | null; size?:
   return <span className={size === "lg" ? "inline-flex items-center rounded-[7px] bg-ink px-2.5 py-1 font-mono text-[15px] font-medium text-white" : "chip-v"}>{label}</span>;
 }
 
-export function PageHeader({ title, intro, actions, eyebrow, badge }: { title: string; intro?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode; badge?: ReactNode }) {
+/** The page's name lives in the top bar (Layout); this is the line under it: a short description, a badge, the page's buttons. */
+export function PageHeader({ intro, actions, badge }: { title?: string; intro?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode; badge?: ReactNode }) {
+  if (!intro && !actions && !badge) return null;
   return (
-    <header className="flex flex-wrap items-end gap-4">
-      <div className="min-w-[280px] flex-1">
-        {eyebrow && <p className="m-0 text-xs text-ink-faint">{eyebrow}</p>}
-        <h1 className={`${eyebrow ? "mt-1" : ""} flex flex-wrap items-center gap-2.5 text-2xl font-semibold tracking-[-0.01em]`}>{title}{badge}</h1>
-        {intro && <p className="mt-1.5 text-ink-soft">{intro}</p>}
+    <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
+        {intro && <p className="text-ink-soft">{intro}</p>}
+        {badge}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>

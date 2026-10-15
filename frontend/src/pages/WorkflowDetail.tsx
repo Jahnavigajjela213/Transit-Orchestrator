@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { AlertTriangle, Check, UserCheck, Wrench, X } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
+import { useCrumbs } from "../lib/topbar";
 import { ago, dayTime, kindLabel, roleName, seconds, sentence, time, words } from "../lib/format";
 import type { Approval, Delegation, Step, WorkflowDetail as WD } from "../lib/types";
 import { StepBody, UncoveredRuns, initialOverride } from "../components/DecisionCard";
@@ -27,6 +28,7 @@ const EDITABLE = ["open_work_order", "pull_vehicle", "reassign_runs"];
 export default function WorkflowDetail() {
   const { id } = useParams();
   const { data: wf, error, reload } = useData<WD>(`/api/workflows/${id}`, [id]);
+  useCrumbs([{ label: "Orchestrations", to: "/workflows" }, { label: wf?.vehicle_label ?? "…" }]);
   const [cat, setCat] = useState<AgentsResponse | null>(null);
   useEffect(() => { loadCatalogue().then(setCat).catch(() => {}); }, []);
   const [picked, setPicked] = useState<string | null | undefined>(undefined);  // undefined: open on the current step
@@ -49,10 +51,6 @@ export default function WorkflowDetail() {
 
   return (
     <>
-      <nav aria-label="Breadcrumb" className="text-xs text-ink-faint">
-        <Link to="/workflows" className="text-ink-soft hover:text-ink">Orchestrations</Link> › <span className="text-ink">{wf.vehicle_label}</span>
-      </nav>
-
       {/* summary */}
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-center gap-3.5 px-[22px] py-5">
@@ -83,11 +81,11 @@ export default function WorkflowDetail() {
           <h2 className="flex-1 text-sm font-semibold">Progress</h2>
           <span className="text-xs text-ink-faint">Select a step to see its agents</span>
         </div>
-        <ol className="grid grid-cols-7">
+        <div className="-mx-1 overflow-x-auto px-1 pt-1.5"><ol className="grid min-w-[600px] grid-cols-7">
           {wf.steps.map((s, i) => (
             <Station key={s.key} s={s} i={i} steps={wf.steps} selected={stepKey === s.key} onPick={() => setPicked(stepKey === s.key ? null : s.key)} />
           ))}
-        </ol>
+        </ol></div>
         {stepKey && cat && (
           <AgentPanel step={wf.steps.find((s) => s.key === stepKey)!} index={wf.steps.findIndex((s) => s.key === stepKey)} cat={cat}
             workflowType={wf.workflow_type} delegations={delegations} onClose={() => setPicked(null)} />
@@ -109,7 +107,7 @@ export default function WorkflowDetail() {
       </div>
       <section className="card px-[22px] py-1.5">
         {tabRows(tab, wf, delegations).map((r, i) => (
-          <div key={i} className="grid grid-cols-[180px_minmax(0,1fr)_160px] gap-4 border-b border-rule-soft py-3.5 last:border-b-0">
+          <div key={i} className="grid grid-cols-1 gap-1 border-b border-rule-soft py-3.5 last:border-b-0 md:grid-cols-[180px_minmax(0,1fr)_160px] md:gap-4">
             <span className="text-[13px] font-semibold">{r.a}</span>
             <span className="text-[13.5px] leading-normal text-[#24323C]">{r.b}</span>
             <span className="text-right text-xs text-ink-faint">{r.c}</span>
@@ -124,7 +122,7 @@ function Fact({ label, value, last = false }: { label: string; value: string; la
   return (
     <div className={`px-[22px] py-3 ${last ? "" : "border-r border-rule-soft"}`}>
       <dt className="eyebrow">{label}</dt>
-      <dd className="mt-1 truncate font-medium" title={value}>{value}</dd>
+      <dd className="mt-1 break-words font-medium sm:truncate" title={value}>{value}</dd>
     </div>
   );
 }
@@ -136,10 +134,10 @@ function Station({ s, i, steps, selected, onPick }: { s: Step; i: number; steps:
   const now = ["awaiting_approval", "active", "waiting"].includes(s.status) || red;
   const lineOn = i < steps.length - 1 && !["pending", "not_run"].includes(steps[i + 1].status);
   const dot = done ? "bg-route text-white"
-    : red ? "bg-stop text-white" : s.status === "waiting" ? "bg-shop text-white" : now ? "bg-signal text-white"
+    : red ? "bg-stop text-white" : now ? "bg-signal text-white"
     : s.status === "skipped" ? "border-2 border-dashed border-[#C9D1CE] bg-white text-ink-faint"
     : "border-2 border-[#C9D1CE] bg-white text-ink-faint";
-  const labelTone = red ? "text-stop" : now ? (s.status === "waiting" ? "text-shop" : "text-signal-ink") : done ? "text-ink" : "text-ink-faint";
+  const labelTone = red ? "text-stop" : now ? "text-signal-ink" : done ? "text-ink" : "text-ink-faint";
   return (
     <li className="relative flex flex-col items-center text-center">
       {i < steps.length - 1 && <span aria-hidden className={`absolute left-1/2 top-[15px] h-[3px] w-full ${lineOn ? "bg-route" : "bg-rule"}`} />}
@@ -273,10 +271,10 @@ function ShopCard({ wf, onDone }: { wf: WD; onDone: () => void }) {
     } catch (e: any) { toast(e.message, "error"); }
   }
   return (
-    <section aria-label="Action required" className="card flex flex-wrap items-center gap-4 border-[#D5DBF5] px-[22px] py-4">
-      <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] bg-shop-tint text-shop"><Wrench className="h-[18px] w-[18px]" aria-hidden /></span>
+    <section aria-label="Action required" className="card flex flex-wrap items-center gap-4 border-signal-line px-[22px] py-4">
+      <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] bg-signal-tint text-signal-ink"><Wrench className="h-[18px] w-[18px]" aria-hidden /></span>
       <div className="min-w-[300px] flex-1">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-shop">Waiting on the shop · Step 7 · Return to service</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-signal-ink">Waiting on the shop · Step 7 · Return to service</div>
         <div className="mt-[3px] text-[15px] font-semibold">{wo.work_order_id} · {status === "in_progress" ? "work under way" : status === "open" ? "not started yet" : "checking maintenance…"}</div>
         <div className="mt-0.5 text-[13px] text-ink-soft">
           {status === "in_progress" ? `Closing the work order returns ${wf.vehicle_label} to the schedule automatically.` : "The shop starts work first; once it is under way the work order can be closed."}

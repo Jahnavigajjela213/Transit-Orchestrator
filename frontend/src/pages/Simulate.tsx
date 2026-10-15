@@ -25,10 +25,10 @@ export default function Simulate() {
       <PageHeader title="Simulate" eyebrow="Testing playground"
         badge={<span className="rounded-full border border-signal-line bg-signal-tint px-2.5 py-[3px] text-[11px] font-semibold tracking-normal text-signal-ink">Sandbox</span>}
         intro="Everything here goes through the same event backbone and product APIs a real integration would use." />
-      <div role="tablist" aria-label="Playground" className="flex gap-6 border-b border-rule">
+      <div role="tablist" aria-label="Playground" className="flex gap-6 overflow-x-auto border-b border-rule">
         {TABS.map((t) => (
           <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => pick(t.key)}
-            className={`-mb-px border-b-2 pb-3 pt-2 text-sm font-medium ${tab === t.key ? "border-route text-ink" : "border-transparent text-ink-soft hover:text-ink"}`}>
+            className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-3 pt-2 text-sm font-medium ${tab === t.key ? "border-route text-ink" : "border-transparent text-ink-soft hover:text-ink"}`}>
             {t.label}
           </button>
         ))}
@@ -65,7 +65,7 @@ function DemoControls() {
           <span role="radiogroup" aria-label={f.description} className="flex rounded-[10px] border border-rule p-[3px]">
             {MODES.map(([m, l]) => (
               <button key={m} type="button" role="radio" aria-checked={f.mode === m} disabled={!canAct} onClick={() => set(f, m, l)}
-                className={`rounded-[7px] px-3 py-1.5 text-xs ${f.mode === m ? (m === "off" ? "bg-go text-white" : "bg-stop text-white") : "text-ink-soft hover:text-ink"}`}>
+                className={`rounded-[7px] px-3 py-1.5 text-xs ${f.mode === m ? (m === "off" ? "bg-go text-white" : m === "fail_once" ? "bg-signal text-white" : "bg-stop text-white") : "text-ink-soft hover:text-ink"}`}>
                 {l}
               </button>
             ))}
