@@ -1,22 +1,28 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Accessibility, Check, Pencil, X } from "lucide-react";
+import { Accessibility, AlertTriangle, ArrowUpRight, Check, Clock, Info, MessageSquareText, Pencil, Sparkles, UserCheck, Users, X } from "lucide-react";
 import { api } from "../lib/api";
 import { dayTime, modeName, roleName, sentence, time, toLocalInput, ago } from "../lib/format";
 import type { Approval, Assignment, Step } from "../lib/types";
-import LineMap from "./LineMap";
+import AgentFlow from "./AgentFlow";
 import { Json, KeyVal, SeverityTag, StatusBadge, Tag, VehicleId } from "./ui";
 import { useToast } from "./Toast";
 
 const verb: Record<string, string> = { approve: "Approved", reject: "Rejected", override: "Changed and approved", acknowledge: "Acknowledged" };
 
-export default function DecisionCard({ item, steps, onDone }: { item: Approval; steps?: Step[]; onDone?: () => void }) {
+/** `inWorkflow`: shown on the orchestration's own page, so the vehicle badge and the link back to it are left out.
+ *  `fill`: on desktop the card grows to its container's height, with the decision bar pinned to the bottom. */
+export default function DecisionCard({ item, steps, onDone, inWorkflow = false, fill = false }: {
+  item: Approval; steps?: Step[]; onDone?: () => void; inWorkflow?: boolean; fill?: boolean;
+}) {
   const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [override, setOverride] = useState<Record<string, any>>(() => initialOverride(item));
   const pending = item.status === "pending";
+  // runs the agent could not cover: the table says it all, full width
+  const gapRuns: any[] | null = item.kind === "escalation" && item.recommendation?.uncovered_runs?.length ? item.recommendation.uncovered_runs : null;
 
   async function send(action: string) {
     setBusy(true);
@@ -33,55 +39,85 @@ export default function DecisionCard({ item, steps, onDone }: { item: Approval; 
     }
   }
 
-  const accent = item.kind === "escalation" ? "border-l-stop" : item.kind === "informational" ? "border-l-ink-faint" : "border-l-signal";
+  const escalation = item.kind === "escalation";
+  const stepIndex = steps ? steps.findIndex((x) => x.key === item.step) : -1;
+  const stepLabel = steps?.[stepIndex]?.label ?? sentence(item.step);
+  const tone = !pending ? "border-rule" : escalation ? "border-stop/40" : item.kind === "informational" ? "border-rule" : "border-signal/40";
+  const iconTone = escalation ? "bg-stop-tint text-stop ring-stop/20" : item.kind === "informational" ? "bg-paper text-ink-soft ring-rule" : "bg-signal-tint text-[#8A5900] ring-signal/25";
+  const KindIcon = escalation ? AlertTriangle : item.kind === "informational" ? Info : UserCheck;
 
   return (
-    <article className={`panel border-l-4 ${pending ? accent : "border-l-rule"}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <VehicleId label={item.vehicle_label} size="lg" />
-          <div className="min-w-0">
-            <h3 className="text-base font-bold leading-snug">{item.title}</h3>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-soft">
-              <SeverityTag severity={item.severity} />
-              {item.kind !== "approval" && <Tag color={item.kind === "escalation" ? "red" : "grey"}>{item.kind === "escalation" ? "Manual action needed" : "For your information"}</Tag>}
-              <span>Requested {ago(item.requested_at)}</span>
-              {item.kind === "approval" && <span>for {item.approver_roles.map((r) => roleName[r] ?? r).join(" or ")}</span>}
-            </div>
+    <article className={`overflow-hidden rounded-2xl border bg-white shadow-[0_1px_2px_rgba(16,24,40,0.05),0_8px_24px_-12px_rgba(16,24,40,0.12)] ${tone} ${fill ? "lg:flex lg:flex-1 lg:flex-col" : ""}`}>
+      {/* header */}
+      <header className="flex flex-wrap items-center gap-3 px-5 py-3">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${iconTone}`}><KindIcon className="h-[18px] w-[18px]" aria-hidden /></span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 text-2xs font-semibold uppercase tracking-wider">
+            <span className={escalation ? "text-stop" : item.kind === "informational" ? "text-ink-faint" : "text-[#8A5900]"}>
+              {escalation ? "Manual action needed" : item.kind === "informational" ? "For your information" : "Approval needed"}
+            </span>
+            {stepIndex >= 0 && <span className="text-ink-faint">· Step {stepIndex + 1} of {steps!.length} · {stepLabel}</span>}
+            <span className="flex items-center gap-x-3 font-normal normal-case tracking-normal text-ink-soft">
+              <span className="text-ink-faint">·</span>
+              <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3 text-ink-faint" aria-hidden />{ago(item.requested_at)}</span>
+              {item.kind === "approval" && <span className="inline-flex items-center gap-1"><Users className="h-3 w-3 text-ink-faint" aria-hidden />{item.approver_roles.map((r) => roleName[r] ?? r).join(" or ")}</span>}
+            </span>
           </div>
+          <h3 className="mt-0.5 flex flex-wrap items-center gap-2 text-[15px] font-semibold leading-snug">
+            {!inWorkflow && <VehicleId label={item.vehicle_label} />}
+            <span>{item.title}</span>
+            <SeverityTag severity={item.severity} />
+          </h3>
         </div>
         <div className="flex items-center gap-2">
           {!pending && <StatusBadge status={item.status} />}
-          <Link to={`/workflows/${item.workflow_id}`} className="text-xs font-medium text-route hover:underline">Open orchestration</Link>
-        </div>
-      </div>
-
-      {steps && <div className="px-4 pt-4"><LineMap steps={steps} compact /></div>}
-
-      <div className="grid gap-4 px-4 py-4 lg:grid-cols-[1fr_minmax(260px,38%)]">
-        <div className="min-w-0">
-          {item.kind === "approval" ? <StepBody item={item} editing={editing && pending} override={override} setOverride={setOverride} /> : (
-            <p className="text-sm leading-relaxed">{item.summary}</p>
+          {!inWorkflow && (
+            <Link to={`/workflows/${item.workflow_id}`} className="btn-quiet px-2.5 py-1 text-xs" aria-label="Open orchestration"><span className="hidden sm:inline">Open orchestration</span> <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /></Link>
           )}
         </div>
-        <aside className="rounded-sm bg-paper/70 p-3 text-sm">
-          <h4 className="mb-1 font-sign text-xs font-bold text-ink-soft">Why the agent proposes this</h4>
-          <p className="leading-relaxed">{item.explanation || item.summary}</p>
-          {item.kind === "approval" && item.summary && item.summary !== item.explanation && (
-            <p className="mt-2 text-xs leading-relaxed text-ink-soft">{item.summary}</p>
-          )}
-          {Object.keys(item.data_considered || {}).length > 0 && (
-            <details className="mt-2 text-xs">
-              <summary className="cursor-pointer text-route">Data considered</summary>
-              <div className="mt-2"><Json value={item.data_considered} /></div>
-            </details>
-          )}
-        </aside>
-      </div>
+      </header>
 
+      {/* where this sits in the seven steps */}
+      {steps && pending && (
+        <div className="border-y border-rule bg-gradient-to-b from-paper/80 to-paper/30 px-5 pb-2.5 pt-3">
+          <AgentFlow steps={steps} medium />
+        </div>
+      )}
+
+      {/* what the agent proposes, and why */}
+      {pending && (gapRuns ? <div className={`px-5 py-3 ${fill ? "lg:flex-1" : ""}`}><UncoveredRuns runs={gapRuns} /></div> : (
+        <div className={`grid gap-4 px-5 py-3 lg:grid-cols-[minmax(0,1fr)_minmax(250px,30%)] ${fill ? "lg:flex-1 lg:content-stretch" : ""}`}>
+          <div className="min-w-0">
+            <h4 className="mb-2 text-2xs font-semibold uppercase tracking-wider text-ink-faint">{item.kind === "approval" ? "Proposed action" : "Summary"}</h4>
+            {item.kind === "approval" ? <StepBody item={item} editing={editing && pending} override={override} setOverride={setOverride} />
+              : <p className="text-sm leading-relaxed">{item.summary}</p>}
+          </div>
+          <aside className="rounded-xl border border-route/15 bg-route-tint/40 px-3.5 py-3 text-[13px]">
+            <h4 className="mb-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-route-dark">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden /> {escalation ? "What happened" : "Agent reasoning"}
+            </h4>
+            <p className="leading-relaxed text-ink">{item.explanation || item.summary}</p>
+            {item.kind === "approval" && item.summary && item.summary !== item.explanation && (
+              <details className="mt-2 text-xs"><summary className="cursor-pointer font-medium text-route">Full assessment</summary>
+                <p className="mt-1.5 leading-relaxed text-ink-soft">{item.summary}</p></details>
+            )}
+            {Object.keys(item.data_considered || {}).length > 0 && (
+              <details className="mt-2 text-xs">
+                <summary className="cursor-pointer font-medium text-route">Data considered</summary>
+                <div className="mt-2"><Json value={item.data_considered} /></div>
+              </details>
+            )}
+          </aside>
+        </div>
+      ))}
+
+      {/* decide */}
       {pending && item.can_decide && (
-        <footer className="flex flex-wrap items-center gap-2 border-t border-rule px-4 py-3">
-          <input className="input max-w-sm flex-1" placeholder="Note for the audit log (optional)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Decision note" />
+        <footer className="flex flex-wrap items-center gap-3 border-t border-rule bg-paper/50 px-5 py-2.5">
+          <label className="relative min-w-[220px] max-w-md flex-1">
+            <MessageSquareText className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden />
+            <input className="input pl-8" placeholder="Add a note for the audit log (optional)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Decision note" />
+          </label>
           <div className="ml-auto flex flex-wrap gap-2">
             {item.kind === "approval" ? (
               <>
@@ -96,22 +132,22 @@ export default function DecisionCard({ item, steps, onDone }: { item: Approval; 
                     <button className="btn-quiet" disabled={busy} onClick={() => setEditing(true)}><Pencil className="h-4 w-4" aria-hidden /> Change</button>
                   )
                 )}
-                {!editing && <button className="btn-primary" disabled={busy} onClick={() => send("approve")}><Check className="h-4 w-4" aria-hidden /> Approve</button>}
+                {!editing && <button className="btn-primary px-4" disabled={busy} onClick={() => send("approve")}><Check className="h-4 w-4" aria-hidden /> Approve</button>}
               </>
             ) : (
-              <button className="btn-primary" disabled={busy} onClick={() => send("acknowledge")}><Check className="h-4 w-4" aria-hidden /> Acknowledge</button>
+              <button className="btn-primary px-4" disabled={busy} onClick={() => send("acknowledge")}><Check className="h-4 w-4" aria-hidden /> Acknowledge</button>
             )}
           </div>
         </footer>
       )}
       {pending && !item.can_decide && (
-        <footer className="border-t border-rule px-4 py-3 text-xs text-ink-soft">
+        <footer className="border-t border-rule bg-paper/50 px-6 py-3.5 text-xs text-ink-soft">
           Only {item.approver_roles.map((r) => roleName[r] ?? r).join(" or ")} can decide this step. Sign in with that role to act on it.
         </footer>
       )}
       {!pending && item.decided_at && (
-        <footer className="border-t border-rule px-4 py-3 text-xs text-ink-soft">
-          {sentence(item.status)} by {item.decided_by_name} on {dayTime(item.decided_at)}{item.decision_note ? `: “${item.decision_note}”` : ""}
+        <footer className={`border-t border-rule px-6 py-3 text-xs text-ink-soft ${fill ? "lg:mt-auto" : ""}`}>
+          {sentence(item.status)} by <span className="font-medium text-ink">{item.decided_by_name}</span> on {dayTime(item.decided_at)}{item.decision_note ? `: “${item.decision_note}”` : ""}
         </footer>
       )}
     </article>
@@ -152,7 +188,7 @@ function StepBody({ item, editing, override, setOverride }: {
       );
     }
     return (
-      <KeyVal items={[
+      <KeyVal dense items={[
         ["Work order", <span>{r.title} <span className="text-ink-soft">({r.fault_code})</span></span>],
         ["Priority", <SeverityTag severity={r.priority} />],
         ["Shop window", `${dayTime(r.shop_start)} to ${dayTime(r.shop_end)}`],
@@ -163,7 +199,7 @@ function StepBody({ item, editing, override, setOverride }: {
   }
   if (item.step === "pull_vehicle") {
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         {editing ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <label><span className="label">Unavailable from</span>
@@ -172,11 +208,11 @@ function StepBody({ item, editing, override, setOverride }: {
               <input type="datetime-local" className="input" value={override.until} onChange={(e) => setOverride({ ...override, until: e.target.value })} /></label>
           </div>
         ) : (
-          <KeyVal items={[["Unavailable", `${dayTime(r.from)} to ${dayTime(r.until)}`],
+          <KeyVal dense items={[["Unavailable", `${dayTime(r.from)} to ${dayTime(r.until)}`],
             ["Runs affected", `${(r.runs_affected || []).length}${r.later_runs ? `, plus ${r.later_runs} later run(s) for the planner` : ""}`]]} />
         )}
         {(r.runs_affected || []).length > 0 && (
-          <ul className="divide-y divide-rule rounded-sm border border-rule text-sm">
+          <ul className="divide-y divide-rule rounded-lg border border-rule text-xs">
             {r.runs_affected.map((x: any) => (
               <li key={x.run_id} className="flex justify-between gap-2 px-3 py-1.5">
                 <span>{x.route_name} <span className="text-ink-soft">{x.block_name}</span></span>
@@ -192,16 +228,16 @@ function StepBody({ item, editing, override, setOverride }: {
     const per = item.options?.per_run || {};
     const rows: Assignment[] = r.assignments || [];
     return (
-      <div className="overflow-x-auto rounded-sm border border-rule">
-        <table className="table">
-          <thead><tr><th>Run</th><th>Starts</th><th>Riders</th><th>Spare vehicle</th><th>Driver</th><th>Delay</th></tr></thead>
+      <div className="overflow-x-auto rounded-lg border border-rule">
+        <table className="table text-xs [&_td]:whitespace-nowrap [&_td]:px-3 [&_td]:py-1.5 [&_td]:align-middle [&_th]:px-3 [&_th]:py-2">
+          <thead><tr><th>Run</th><th>Starts</th><th>Riders</th><th>Spare vehicle</th><th>Driver</th><th className="text-right">Delay</th></tr></thead>
           <tbody>
             {rows.map((a) => {
               const o = (override.assignments || []).find((x: any) => x.run_id === a.run_id) || {};
               const opts = per[a.run_id] || { vehicles: [], drivers: [] };
               return (
                 <tr key={a.run_id}>
-                  <td><div className="font-medium">{a.route_name}</div><div className="text-2xs text-ink-soft">{a.block_name}</div></td>
+                  <td><span className="font-medium">{a.route_name}</span> <span className="text-2xs text-ink-soft">{a.block_name}</span></td>
                   <td className="tnum whitespace-nowrap">{a.start_h}</td>
                   <td className="tnum">{a.riders}{a.needs_wheelchair && <Accessibility className="ml-1 inline h-3.5 w-3.5 text-route" aria-label="wheelchair rider" />}</td>
                   <td>
@@ -212,7 +248,7 @@ function StepBody({ item, editing, override, setOverride }: {
                         <option value="">Leave for the dispatcher</option>
                       </select>
                     ) : a.vehicle_label ? (
-                      <div><VehicleId label={a.vehicle_label} /><div className="mt-0.5 text-2xs text-ink-soft">{a.reason}</div></div>
+                      <span className="inline-flex items-center gap-1.5" title={a.reason}><VehicleId label={a.vehicle_label} /><span className="max-w-[9.5rem] truncate text-2xs text-ink-soft">{a.reason.replace(/^[^(]*\(|\)$/g, "")}</span></span>
                     ) : <Tag color="red">No spare found</Tag>}
                   </td>
                   <td>
@@ -222,10 +258,10 @@ function StepBody({ item, editing, override, setOverride }: {
                         {opts.drivers.map((d: any) => <option key={d.driver_id} value={d.driver_id}>{d.name}</option>)}
                       </select>
                     ) : (
-                      <div>{a.driver_name ?? "—"}{a.keep_driver && <div className="text-2xs text-ink-soft">Scheduled driver</div>}</div>
+                      <span>{a.driver_name ?? "—"}{a.keep_driver && <span className="ml-1 text-2xs text-ink-faint">· scheduled</span>}</span>
                     )}
                   </td>
-                  <td className="tnum whitespace-nowrap">{a.delay_minutes ? `+${a.delay_minutes} min` : "None"}</td>
+                  <td className="text-right tnum">{a.delay_minutes ? `+${a.delay_minutes} min` : "None"}</td>
                 </tr>
               );
             })}
@@ -290,6 +326,28 @@ function AdjustBody({ item, editing, override, setOverride }: {
         </div>
       )}
       {r.flag_rider && <p className="text-xs text-[#8A5900]">{r.missed?.rider_name} has {r.rider_no_shows_30d} no-shows in the last 30 days and will be flagged for no-show policy review.</p>}
+    </div>
+  );
+}
+
+/** Runs the agent could not cover, raised with the dispatcher instead of being skipped. */
+function UncoveredRuns({ runs }: { runs: any[] }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium leading-relaxed text-stop">No qualified spare vehicle and driver for {runs.length} run(s), {runs.reduce((n, r) => n + r.riders, 0)} booked riders. Please arrange cover by hand: call in an off-duty driver, borrow a vehicle from the other depot, or rebook the riders.</p>
+      <div className="overflow-x-auto rounded-lg border border-rule">
+        <table className="table text-xs [&_td]:py-2 [&_th]:py-2">
+          <thead><tr><th>Run</th><th>Starts</th><th>Riders</th><th>Why it could not be covered</th></tr></thead>
+          <tbody>{runs.map((r) => (
+            <tr key={r.run_id}>
+              <td><span className="font-medium">{r.route_name}</span> <span className="text-2xs text-ink-soft">{r.block_name}</span></td>
+              <td className="tnum whitespace-nowrap">{r.start_h}</td>
+              <td className="tnum">{r.riders}{r.needs_wheelchair && <Accessibility className="ml-1 inline h-3.5 w-3.5 text-route" aria-label="wheelchair rider" />}</td>
+              <td className="text-xs">{sentence(r.reason)}{r.spares_checked ? <span className="text-ink-faint"> · {r.spares_checked} spare(s) checked</span> : null}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
     </div>
   );
 }

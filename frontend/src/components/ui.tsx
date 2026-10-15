@@ -12,7 +12,7 @@ const tone: Record<string, string> = {
 
 export function Tag({ children, color = "grey", title }: { children: ReactNode; color?: keyof typeof tone; title?: string }) {
   return (
-    <span title={title} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-sm px-1.5 py-0.5 text-2xs font-semibold ${tone[color]}`}>
+    <span title={title} className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold ${tone[color]}`}>
       {children}
     </span>
   );
@@ -53,30 +53,37 @@ export function LevelTag({ level }: { level: string | null | undefined }) {
 export function VehicleId({ label, size = "md" }: { label: string | null; size?: "md" | "lg" }) {
   if (!label) return null;
   return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-sm bg-ink font-sign font-bold tracking-wide text-white tnum ${size === "lg" ? "px-2.5 py-1 text-lg" : "px-1.5 py-0.5 text-xs"}`}>
+    <span className={`inline-flex items-center whitespace-nowrap rounded-md bg-ink font-semibold tracking-wide text-white tnum ${size === "lg" ? "px-2.5 py-1 text-base" : "px-1.5 py-0.5 text-[11px]"}`}>
       {label}
     </span>
   );
 }
 
-export function PageHeader({ title, intro, actions }: { title: string; intro?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({ title, intro, actions, eyebrow, badge }: { title: string; intro?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode; badge?: ReactNode }) {
   return (
-    <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="max-w-3xl">
-        <h1 className="text-2xl font-bold leading-tight">{title}</h1>
-        {intro && <p className="mt-1 text-sm text-ink-soft">{intro}</p>}
+        {eyebrow && <div className="mb-1 text-xs font-medium text-ink-faint">{eyebrow}</div>}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h1 className="text-2xl font-semibold leading-tight">{title}</h1>
+          {badge}
+        </div>
+        {intro && <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{intro}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>
   );
 }
 
-export function Section({ title, aside, children, className = "" }: { title?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
+export function Section({ title, aside, children, className = "", subtitle }: { title?: string; aside?: ReactNode; children: ReactNode; className?: string; subtitle?: ReactNode }) {
   return (
     <section className={`panel ${className}`}>
       {title && (
-        <div className="flex items-center justify-between gap-2 border-b border-rule px-4 py-2.5">
-          <h2 className="text-sm font-bold">{title}</h2>
+        <div className="flex items-center justify-between gap-3 border-b border-rule px-5 py-3.5">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-xs text-ink-soft">{subtitle}</p>}
+          </div>
           {aside}
         </div>
       )}
@@ -103,16 +110,16 @@ export function ErrorNote({ message }: { message: string }) {
 
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="px-6 py-10 text-center">
-      <p className="font-sign font-semibold">{title}</p>
+    <div className="px-6 py-12 text-center">
+      <p className="font-semibold">{title}</p>
       {children && <div className="mx-auto mt-1 max-w-md text-sm text-ink-soft">{children}</div>}
     </div>
   );
 }
 
-export function KeyVal({ items }: { items: [string, ReactNode][] }) {
+export function KeyVal({ items, dense = false }: { items: [string, ReactNode][]; dense?: boolean }) {
   return (
-    <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
+    <dl className={`grid grid-cols-[max-content_1fr] ${dense ? "gap-x-5 gap-y-1.5 text-[13px]" : "gap-x-6 gap-y-2.5 text-sm"}`}>
       {items.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="text-ink-soft">{k}</dt>

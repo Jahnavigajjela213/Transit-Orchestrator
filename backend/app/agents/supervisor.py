@@ -23,12 +23,14 @@ log = get_logger("supervisor")
 # Which agent owns which part of each step. Read-only consults are listed with the step they inform.
 ROUTING: dict[str, dict[str, list[tuple[str, str]]]] = {
     "vehicle_health": {
-        "assess": [("asset", "Classify fault, read vehicle health, find a shop window"), ("trip", "Find runs at risk and spare vehicles"),
-                   ("workforce", "Read driver roster"), ("safety", "Check driver compliance and open vehicle defects")],
+        "detect": [("asset", "Identify the fault and read the vehicle's health in FASTER")],
+        "assess": [("asset", "Rate the severity and find a shop window")],
         "open_work_order": [("asset", "Open the work order in FASTER"), ("safety", "Record the vehicle defect in Vestige")],
-        "pull_vehicle": [("trip", "Mark the vehicle unavailable")],
-        "reassign_runs": [("trip", "Put spare vehicles and drivers on the runs")],
-        "notify_riders": [("trip", "Update ETAs"), ("rider_comms", "Notify riders")],
+        "pull_vehicle": [("trip", "Find the runs that lose this vehicle and mark it unavailable in trip management")],
+        "reassign_runs": [("workforce", "Find a driver with the right licence, certifications and hours for the spare vehicle"),
+                          ("safety", "Check the spare vehicle has no open defects and the driver is compliant"),
+                          ("trip", "Put the spare vehicle and driver on the affected runs")],
+        "notify_riders": [("rider_comms", "Tell affected riders in their language and preferred channel"), ("trip", "Update pickup ETAs")],
         "return_to_service": [("asset", "Confirm the work order is closed"), ("trip", "Return the vehicle to the schedule"),
                               ("safety", "Clear the vehicle defect")],
     },

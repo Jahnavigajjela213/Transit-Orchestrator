@@ -263,6 +263,10 @@ class OrchestratorService:
             failure = values.get("failure")
             if failure:
                 await self._escalate(s, wf, failure["step"], self._failure_text(values))
+            gap = values.get("coverage_gap")
+            if gap:
+                await self._escalate(s, wf, "reassign_runs", gap["text"], title=f"No cover for {len(gap['runs'])} run(s) on {wf.vehicle_label}",
+                                     recommendation={"uncovered_runs": gap["runs"], "riders": gap["riders"]})
             wf.context = {**(wf.context or {}), "pending_interrupt": pending}
             if pending and pending["type"] == "approval":
                 await self._create_approval(s, wf, values, pending, explanation)
@@ -302,7 +306,7 @@ class OrchestratorService:
             return "failed"
         if f and not f.get("escalate_only"):
             return "compensated"
-        if f or values.get("halted_at"):
+        if f or values.get("halted_at") or values.get("coverage_gap"):
             return "completed_with_issues"
         return "completed"
 
@@ -315,13 +319,14 @@ class OrchestratorService:
             base += " Rolled back: " + ", ".join(c["action"].replace("_", " ") for c in comp) + "."
         return base + " Check the affected runs and finish this step by hand."
 
-    async def _escalate(self, s, wf: Workflow, step: str, text: str) -> None:
+    async def _escalate(self, s, wf: Workflow, step: str, text: str, title: str | None = None, recommendation: dict | None = None) -> None:
         exists = (await s.execute(select(ApprovalRequest.id).where(ApprovalRequest.workflow_id == wf.id, ApprovalRequest.step == step,
                                                                   ApprovalRequest.kind == "escalation"))).scalar_one_or_none()
         if exists:
             return
         s.add(ApprovalRequest(id=new_id("apr"), tenant_id=wf.tenant_id, workflow_id=wf.id, step=step, kind="escalation", status="pending",
-                              title=f"Action needed on {wf.vehicle_label or wf.title}", summary=text, explanation=text, approver_roles=["dispatcher"],
+                              title=title or f"Action needed on {wf.vehicle_label or wf.title}", summary=text, explanation=text,
+                              recommendation=recommendation or {}, approver_roles=["dispatcher"],
                               vehicle_label=wf.vehicle_label, severity=wf.severity, requested_at=now()))
         await s.flush()
         hub.publish(wf.tenant_id, "approval", {"workflow_id": wf.id, "kind": "escalation"})

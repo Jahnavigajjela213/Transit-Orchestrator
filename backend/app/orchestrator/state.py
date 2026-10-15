@@ -25,6 +25,7 @@ class WorkflowState(TypedDict, total=False):
     returned: Optional[dict[str, Any]]
     defect: Optional[dict[str, Any]]
     safety_alert: Optional[str]
+    coverage_gap: Optional[dict[str, Any]]  # runs the agent could not cover: raised to the dispatcher as an escalation
 
 
 class NoShowState(TypedDict, total=False):

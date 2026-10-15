@@ -63,16 +63,33 @@ async def _delegate(state: WorkflowState, rules: dict, step: str, agent: str, ta
     return await supervisor.delegate(state, rules, step, agent, task, fn, persona=persona, requires=requires)
 
 
-async def _read(state: WorkflowState, rules: dict, agent: str, task: str, fn) -> Any:
-    return await _delegate(state, rules, "assess", agent, task, fn, decision={})
+async def _read(state: WorkflowState, rules: dict, agent: str, task: str, fn, *, step: str = "assess") -> Any:
+    """A read-only consult. The reads all happen while assessing, but each is recorded against the step it serves
+    (e.g. the driver roster serves Reassign runs), so the step's agents show what they looked at."""
+    return await _delegate(state, rules, step, agent, task, fn, decision={})
 
 
 async def _roster(state: WorkflowState, rules: dict, on_date) -> list[dict]:
     """Driver roster from the workforce agent, each driver carrying Vestige compliance from the safety agent."""
-    drivers = await _read(state, rules, "workforce", "driver_roster", lambda ctx: adapters.workforce.drivers(ctx))
+    drivers = await _read(state, rules, "workforce", "driver_roster", lambda ctx: adapters.workforce.drivers(ctx), step="reassign_runs")
     ids = [d["driver_id"] for d in drivers if d.get("driver_id")]
-    comp = await _read(state, rules, "safety", "driver_compliance", lambda ctx: adapters.safety.driver_compliance(ctx, ids, on_date))
+    comp = await _read(state, rules, "safety", "driver_compliance", lambda ctx: adapters.safety.driver_compliance(ctx, ids, on_date),
+                       step="reassign_runs")
     return [{**d, "compliance": comp.get(d.get("driver_id"))} for d in drivers]
+
+
+async def _spare_defects(state: WorkflowState, rules: dict) -> dict[str, list]:
+    """Safety agent: open Vestige defects on the vehicles that could stand in, so no spare with a defect is proposed."""
+    fleet = await _read(state, rules, "trip", "spare_fleet", lambda ctx: adapters.trip.fleet(ctx), step="reassign_runs")
+    ids = [v["vehicle_id"] for v in fleet if v["vehicle_id"] != state["vehicle_id"] and v["status"] != "out_of_service"]
+
+    async def check(ctx):
+        found = {}
+        for v in ids:
+            if d := await adapters.safety.open_defects(ctx, v):
+                found[v] = d
+        return found
+    return await _read(state, rules, "safety", "spare_vehicle_health", check, step="reassign_runs")
 
 
 def _needs_defect(rules: dict, fault: dict) -> bool:
@@ -118,22 +135,32 @@ async def assess_node(state: WorkflowState) -> dict:
     async def asset_view(ctx):
         return (await A.classify_trigger(ctx, state["trigger_type"], state["trigger"], rules), await adapters.asset.vehicle_health(ctx, vid))
 
-    fault, health = await _read(state, rules, "asset", "classify_fault_and_health", asset_view)
-    vehicle = await _read(state, rules, "trip", "read_vehicle", lambda ctx: adapters.trip.vehicle(ctx, vid))
+    # Detect: the asset agent identifies the fault and the vehicle's health.
+    fault, health = await _read(state, rules, "asset", "classify_fault_and_health", asset_view, step="detect")
+    # Pull vehicle: the trip agent works out when the vehicle comes off the road and which runs lose it.
+    vehicle = await _read(state, rules, "trip", "read_vehicle", lambda ctx: adapters.trip.vehicle(ctx, vid), step="pull_vehicle")
     earliest, immediate, timing_reason = await _read(state, rules, "trip", "current_run",
-                                                     lambda ctx: A.earliest_shop_start(ctx, vid, fault["severity"]))
+                                                     lambda ctx: A.earliest_shop_start(ctx, vid, fault["severity"]), step="pull_vehicle")
+    # Assess: the asset agent finds the shop window.
     window = await _read(state, rules, "asset", "find_shop_window",
                          lambda ctx: adapters.asset.find_shop_window(ctx, vid, earliest, int(fault["est_repair_hours"]), immediate))
-    oos_from, oos_until = A.dt(window["start"]), A.dt(window["end"])
-    at_risk, later = await _read(state, rules, "trip", "runs_at_risk", lambda ctx: A.runs_in_window(ctx, rules, vid, oos_from, oos_until))
+    oos_from, oos_until = A.out_of_service(earliest, immediate, window)
+    oos_until = await _read(state, rules, "trip", "next_block", lambda ctx: A.through_next_block(ctx, rules, vid, oos_from, oos_until),
+                            step="pull_vehicle")
+    at_risk, later = await _read(state, rules, "trip", "runs_at_risk", lambda ctx: A.runs_in_window(ctx, rules, vid, oos_from, oos_until),
+                                 step="pull_vehicle")
+    # Reassign runs: workforce finds drivers, safety checks their compliance and the spare vehicles' defects, trip plans the cover.
     roster = await _roster(state, rules, oos_from.date()) if at_risk else []
-    defects = await _read(state, rules, "safety", "open_defects", lambda ctx: adapters.safety.open_defects(ctx, vid))
-    proposals = await _read(state, rules, "trip", "plan_cover", lambda ctx: A.plan_cover(ctx, rules, vid, at_risk, roster))
+    unsafe = await _spare_defects(state, rules) if at_risk else {}
+    defects = await _read(state, rules, "safety", "open_defects", lambda ctx: adapters.safety.open_defects(ctx, vid), step="open_work_order")
+    proposals = await _read(state, rules, "trip", "plan_cover", lambda ctx: A.plan_cover(ctx, rules, vid, at_risk, roster, unsafe),
+                            step="reassign_runs")
     noncompliant = [{"driver_id": d["driver_id"], "name": d["name"], "reasons": d["compliance"]["blocking"]}
                     for d in roster if d.get("compliance") and d["compliance"].get("blocking")]
     a = {
         "severity": fault["severity"], "fault": fault, "vehicle": vehicle, "health": health,
-        "timing_reason": timing_reason, "oos_from": window["start"], "oos_until": window["end"], "depot": window["depot"],
+        "timing_reason": timing_reason, "oos_from": oos_from.isoformat(), "oos_until": oos_until.isoformat(),
+        "shop_from": window["start"], "shop_until": window["end"], "pull_now": immediate, "depot": window["depot"],
         "runs_at_risk": at_risk, "later_runs": later, "proposals": proposals,
         "safety": {"open_defects": defects, "noncompliant_drivers": noncompliant, "will_log_defect": _needs_defect(rules, fault)},
     }
@@ -184,6 +211,33 @@ async def assess_node(state: WorkflowState) -> dict:
     return {"assessment": a}
 
 
+def _uncovered(a: dict, covered: set[str]) -> list[dict]:
+    """Runs at risk that have no cover, each with the reason the agent could not cover it."""
+    out = []
+    for p in a["proposals"]:
+        if p["run_id"] in covered:
+            continue
+        if not p["vehicle_id"]:
+            why = (f"no spare vehicle is free for the whole run with {p['riders']} seat(s)"
+                   + (" and a wheelchair position" if p["needs_wheelchair"] else ""))
+        elif not p["driver_id"]:
+            why = f"spare {p['vehicle_label']} is free, but no qualified, compliant driver with hours left is available"
+        else:
+            why = "left for the dispatcher when the cover plan was approved"
+        out.append({**{k: p.get(k) for k in ("run_id", "route_name", "block_name", "start", "start_h", "riders", "needs_wheelchair", "vehicle_label")},
+                    "reason": why, "spares_checked": len(p.get("candidates") or [])})
+    return out
+
+
+def _coverage_gap(state: WorkflowState, runs: list[dict]) -> dict:
+    riders = sum(r["riders"] for r in runs)
+    detail = "; ".join(f"{r['route_name']} {r['block_name']} at {r['start_h']} ({r['riders']} riders): {r['reason']}" for r in runs)
+    text = (f"{state['vehicle_label']} is coming off the road and the agent could not cover {len(runs)} of its run(s), "
+            f"{riders} booked rider(s) in all. {detail}. Please arrange cover by hand: call in an off-duty driver, borrow a vehicle "
+            "from the other depot, or rebook the riders.")
+    return {"runs": runs, "riders": riders, "text": text, "at": now().isoformat()}
+
+
 # ---------------------------------------------------------------- gates
 def make_gate(step: str, recommend=None, options=None, skip=None):
     """Policy gate shared by all workflows. recommend/options/skip default to the vehicle health versions."""
@@ -231,6 +285,28 @@ def make_gate(step: str, recommend=None, options=None, skip=None):
     return gate
 
 
+def make_reassign_gate():
+    """Reassign runs, but when no run can be covered the agent raises it with the dispatcher instead of skipping the step."""
+    base = make_gate("reassign_runs")
+
+    async def gate(state):
+        a = state["assessment"]
+        rules = await _rules(state)
+        level = policy_engine.level_for(rules, "reassign_runs", a.get("severity"))
+        if a["runs_at_risk"] and level != "shadow" and not any(p["vehicle_id"] and p["driver_id"] for p in a["proposals"]):
+            gap = _coverage_gap(state, _uncovered(a, set()))
+            await _audit(state, record_type="decision", step="reassign_runs", autonomy_level=level, outcome="escalated",
+                         data_considered={"uncovered_runs": gap["runs"]}, recommendation={"action": "dispatcher to arrange cover"},
+                         explanation=gap["text"])
+            await set_step(state["workflow_id"], "reassign_runs", "escalated",
+                           f"No spare vehicle and driver for {len(gap['runs'])} run(s); raised with the dispatcher", level)
+            return {**_with_decision(state, "reassign_runs", {"decision": "escalated", "level": level}), "coverage_gap": gap}
+        return await base(state)
+
+    gate.__name__ = "gate_reassign_runs"
+    return gate
+
+
 def _skip_reason(state: WorkflowState, step: str) -> str:
     a = state["assessment"]
     if step in ("reassign_runs", "notify_riders") and not a["runs_at_risk"]:
@@ -250,7 +326,8 @@ def _recommendation(state: WorkflowState, step: str) -> dict:
     a = state["assessment"]
     if step == "open_work_order":
         return {"priority": A.priority_for(a["severity"]), "title": a["fault"]["description"], "fault_code": a["fault"]["code"],
-                "shop_start": a["oos_from"], "shop_end": a["oos_until"], "depot": a["depot"], "timing": a["timing_reason"]}
+                "shop_start": a.get("shop_from", a["oos_from"]), "shop_end": a.get("shop_until", a["oos_until"]), "depot": a["depot"],
+                "timing": a["timing_reason"]}
     if step == "pull_vehicle":
         return {"vehicle_label": state["vehicle_label"], "from": a["oos_from"], "until": a["oos_until"],
                 "runs_affected": [{k: r[k] for k in ("run_id", "route_name", "block_name", "start", "riders")} for r in a["runs_at_risk"]],
@@ -293,8 +370,8 @@ async def exec_open_work_order(state: WorkflowState) -> dict:
     a, d = state["assessment"], _decision(state, "open_work_order")
     rules = await _rules(state)
     ov = d.get("override") or {}
-    start = A.dt(ov.get("shop_start") or a["oos_from"])
-    end = A.dt(ov.get("shop_end") or a["oos_until"])
+    start = A.dt(ov.get("shop_start") or a.get("shop_from", a["oos_from"]))
+    end = A.dt(ov.get("shop_end") or a.get("shop_until", a["oos_until"]))
     priority = ov.get("priority") or A.priority_for(a["severity"])
     try:
         wo = await _delegate(state, rules, "open_work_order", "asset", "create_work_order", lambda ctx: adapters.asset.create_work_order(
@@ -337,18 +414,25 @@ async def exec_open_work_order(state: WorkflowState) -> dict:
     upd["completed_actions"] = actions
     # A changed shop window changes the out-of-service window too.
     if ov.get("shop_start") or ov.get("shop_end"):
-        upd["assessment"] = await _replan(state, start, end)
+        pull_from = min(A.dt(a["oos_from"]), start) if a.get("pull_now") else start  # an urgent fault still comes off the road now
+        upd["assessment"] = await _replan(state, pull_from, end, shop=(start, end))
     return upd
 
 
-async def _replan(state: WorkflowState, start: datetime, end: datetime) -> dict:
+async def _replan(state: WorkflowState, start: datetime, end: datetime, shop: tuple[datetime, datetime] | None = None) -> dict:
     rules = await _rules(state)
     a = dict(state["assessment"])
     vid = state["vehicle_id"]
-    at_risk, later = await _read(state, rules, "trip", "runs_at_risk", lambda ctx: A.runs_in_window(ctx, rules, vid, start, end))
+    end = await _read(state, rules, "trip", "next_block", lambda ctx: A.through_next_block(ctx, rules, vid, start, end), step="pull_vehicle")
+    at_risk, later = await _read(state, rules, "trip", "runs_at_risk", lambda ctx: A.runs_in_window(ctx, rules, vid, start, end),
+                                 step="pull_vehicle")
     roster = await _roster(state, rules, start.date()) if at_risk else []
-    proposals = await _read(state, rules, "trip", "plan_cover", lambda ctx: A.plan_cover(ctx, rules, vid, at_risk, roster))
+    unsafe = await _spare_defects(state, rules) if at_risk else {}
+    proposals = await _read(state, rules, "trip", "plan_cover", lambda ctx: A.plan_cover(ctx, rules, vid, at_risk, roster, unsafe),
+                            step="reassign_runs")
     a.update(oos_from=start.isoformat(), oos_until=end.isoformat(), runs_at_risk=at_risk, later_runs=later, proposals=proposals)
+    if shop:
+        a.update(shop_from=shop[0].isoformat(), shop_until=shop[1].isoformat())
     await update_workflow(state["workflow_id"], runs_at_risk=len(at_risk), context={"assessment": a})
     await _audit(state, record_type="assessment", step="assess", outcome="replanned",
                  data_considered={"runs_at_risk": at_risk}, recommendation={"from": a["oos_from"], "until": a["oos_until"]},
@@ -427,8 +511,11 @@ async def exec_reassign_runs(state: WorkflowState) -> dict:
                  recommendation={"assignments": applied}, actor="trip-agent",
                  human_action=d.get("decision") if d.get("decision") != "auto" else None,
                  explanation=f"Reassigned {len(applied)} run(s)" + (f"; {uncovered} left for the dispatcher" if uncovered else "") + "." + _approved_by(d))
-    await set_step(state["workflow_id"], "reassign_runs", "done", f"{len(applied)} of {len(a['runs_at_risk'])} run(s) covered", runs_covered=len(applied))
-    return {"assignments": applied,
+    gap = _coverage_gap(state, _uncovered(a, {x["run_id"] for x in applied})) if uncovered else None
+    await set_step(state["workflow_id"], "reassign_runs", "done",
+                   f"{len(applied)} of {len(a['runs_at_risk'])} run(s) covered" + (f"; {uncovered} raised with the dispatcher" if uncovered else ""),
+                   runs_covered=len(applied))
+    return {"assignments": applied, "coverage_gap": gap,
             "completed_actions": state.get("completed_actions", []) + [{"step": "reassign_runs", "action": "assign_run", "run_id": x["run_id"]} for x in applied]}
 
 
@@ -605,7 +692,7 @@ def _stop_after_reassign_gate(state: WorkflowState) -> str:
     d = _decision(state, "reassign_runs").get("decision")
     if d == "rejected" and state.get("block"):
         return "restore_after_reject"
-    return "gate_notify_riders" if d == "skipped" else "await_work_order_close"
+    return "gate_notify_riders" if d in ("skipped", "escalated") else "await_work_order_close"
 
 
 async def restore_after_reject(state: WorkflowState) -> dict:
@@ -627,8 +714,9 @@ async def restore_after_reject(state: WorkflowState) -> dict:
 def build_graph() -> StateGraph:
     g = StateGraph(WorkflowState)
     g.add_node("assess", assess_node)
-    for step in ("open_work_order", "pull_vehicle", "reassign_runs", "notify_riders", "return_to_service"):
+    for step in ("open_work_order", "pull_vehicle", "notify_riders", "return_to_service"):
         g.add_node(f"gate_{step}", make_gate(step))
+    g.add_node("gate_reassign_runs", make_reassign_gate())
     g.add_node("exec_open_work_order", exec_open_work_order)
     g.add_node("exec_pull_vehicle", exec_pull_vehicle)
     g.add_node("exec_reassign_runs", exec_reassign_runs)

@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #1D2733;
-  --color-ink-soft: #4A5663;
-  --color-ink-faint: #7A8693;
-  --color-paper: #EEF1F3;
-  --color-rule: #D3D9DF;
+  --color-ink: #101828;
+  --color-ink-soft: #475467;
+  --color-ink-faint: #8A94A6;
+  --color-paper: #F5F7FA;
+  --color-rule: #E4E7EC;
   --color-route: #0B6E69;
   --color-route-dark: #085550;
   --color-route-tint: #E3F1EF;
@@ -15,11 +15,12 @@
   --color-stop-tint: #F8E3E0;
   --color-go: #2F7D4F;
   --color-go-tint: #E2F0E7;
-  --color-rail: #22303D;
-  --color-rail-hover: #2C3D4D;
+  --color-rail: #0F1C2B;
+  --color-rail-hover: #1B2B3D;
 
-  --font-sign: "Overpass", "Segoe UI", system-ui, sans-serif;
-  --font-sans: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-sign: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -32,16 +33,19 @@
 }
 
 @layer base {
-  html { @apply bg-paper text-ink font-sans antialiased; font-size: 15px; }
-  h1, h2, h3, h4 { @apply font-sign; }
+  html { @apply bg-paper text-ink font-sans antialiased; font-size: 14.5px; font-feature-settings: "cv11", "ss01"; }
+  h1, h2, h3, h4 { @apply font-sign tracking-tight; }
   :focus-visible { outline: 2px solid #0B6E69; outline-offset: 2px; }
   .tnum { font-variant-numeric: tabular-nums; }
   /* Grid cells may shrink below their content, so a wide table scrolls inside its panel instead of widening the page. */
   .grid > * { min-width: 0; }
+  /* No visible scrollbars anywhere: areas still scroll with the wheel, trackpad, touch and keyboard. */
+  * { scrollbar-width: none; -ms-overflow-style: none; }
+  *::-webkit-scrollbar { display: none; width: 0; height: 0; }
 }
 
 @utility btn {
-  @apply inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 /* Data-heavy pages fit the viewport on desktop: the table scrolls inside its panel and the page itself stays put. */
@@ -55,11 +59,11 @@
 @layer components {
   .fit-scroll .table th { position: sticky; top: 0; z-index: 1; background-color: color-mix(in srgb, var(--color-paper) 60%, white); box-shadow: inset 0 -1px 0 var(--color-rule); }
   /* overflow-x: a table wider than its panel scrolls inside the panel instead of being clipped or widening the page */
-  .panel { @apply bg-white border border-rule rounded-lg; overflow-x: auto; }
-  .btn-primary { @apply btn bg-route text-white hover:bg-route-dark; }
-  .btn-quiet { @apply btn border border-rule bg-white text-ink hover:bg-paper; }
+  .panel { @apply bg-white border border-rule rounded-xl; overflow-x: auto; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05); }
+  .btn-primary { @apply btn bg-route text-white shadow-xs hover:bg-route-dark; }
+  .btn-quiet { @apply btn border border-rule bg-white text-ink shadow-xs hover:bg-paper; }
   .btn-danger { @apply btn border border-stop/40 bg-white text-stop hover:bg-stop-tint; }
-  .input { @apply w-full rounded-sm border border-rule bg-white px-2.5 py-1.5 text-sm focus:border-route focus:outline-hidden; }
+  .input { @apply w-full rounded-md border border-rule bg-white px-2.5 py-1.5 text-sm focus:border-route focus:outline-hidden; }
   /* Dropdowns: our own chevron, inset from the edge, instead of the browser arrow pressed against the border. */
   select.input {
     appearance: none;
@@ -70,10 +74,22 @@
     background-size: 0.875rem;
     text-overflow: ellipsis;
   }
-  .label { @apply block text-xs font-medium text-ink-soft mb-1; }
+  .label { @apply block text-xs font-medium text-ink-soft mb-1.5; }
+  /* Segmented control: tabs that switch a view in place. */
+  .seg { @apply inline-flex rounded-lg border border-rule bg-white p-0.5 shadow-xs; }
+  .seg > button { @apply rounded-md px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors; }
+  .seg > button[aria-selected="true"] { @apply bg-ink text-white; }
+  .seg > button:not([aria-selected="true"]):hover { @apply text-ink; }
+  /* Underlined tabs for sections of one page. */
+  .tabs { @apply flex gap-6 border-b border-rule; }
+  .tabs > button, .tabs > a { @apply -mb-px inline-flex items-center gap-2 border-b-2 border-transparent pb-2.5 pt-1 text-sm font-medium text-ink-soft transition-colors; }
+  .tabs > button:hover, .tabs > a:hover { @apply text-ink; }
+  .tabs > [aria-selected="true"] { @apply border-route text-ink; }
+  .count { @apply rounded-full bg-paper px-1.5 py-px text-[11px] font-semibold text-ink-soft tabular-nums; }
   .table { @apply w-full text-sm; }
-  .table th { @apply text-left text-xs font-semibold text-ink-soft px-3 py-2 border-b border-rule bg-paper/60 whitespace-nowrap; }
-  .table td { @apply px-3 py-2 border-b border-rule/70 align-top; }
+  .table th { @apply text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5 border-b border-rule bg-paper/70 whitespace-nowrap; }
+  .table td { @apply px-4 py-3 border-b border-rule/70 align-top; }
+  .table tbody tr { @apply transition-colors; }
   .table tr:last-child td { @apply border-b-0; }
 }
 

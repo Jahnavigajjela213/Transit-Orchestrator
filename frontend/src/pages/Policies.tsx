@@ -68,7 +68,7 @@ export default function Policies() {
           <button className="btn-primary" disabled={!dirty || saving} onClick={save}>{saving ? "Saving…" : "Save policy"}</button>
         </>} />
       <div className="flex gap-1 border-b border-rule" role="tablist">
-        {data.meta.workflow_types.map((t) => (
+        {data.meta.workflow_types.filter((t) => t.key === "vehicle_health").map((t) => (
           <button key={t.key} role="tab" aria-selected={wtype === t.key} onClick={() => { setRules(null); setWtype(t.key); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${wtype === t.key ? "border-route text-ink" : "border-transparent text-ink-soft hover:text-ink"}`}>{t.name}</button>
         ))}

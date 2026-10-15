@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
 import { useToast } from "../components/Toast";
-import { time } from "../lib/format";
+import { easternNow, time } from "../lib/format";
 import { ErrorNote, Loading, PageHeader, StatusBadge, Tag, VehicleId, Empty } from "../components/ui";
 
 interface Sched {
@@ -54,8 +54,8 @@ function ReassignForm({ run, onDone }: { run: Sched["runs"][number]; onDone: () 
 
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-export default function Schedule() {
-  const today = new Date();
+export default function Schedule({ embedded = false }: { embedded?: boolean }) {
+  const today = easternNow();
   const days = [-1, 0, 1, 2].map((o) => { const d = new Date(today); d.setDate(d.getDate() + o); return d; });
   const [day, setDay] = useState(iso(today));
   const [changed, setChanged] = useState(false);
@@ -66,15 +66,17 @@ export default function Schedule() {
 
   return (
     <div className="fit-page">
-      <PageHeader title="Schedule" intro="Runs from trip management, with driver names resolved from workforce. Runs the agent moved to a spare are marked." />
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {days.map((d) => (
-          <button key={iso(d)} onClick={() => setDay(iso(d))}
-            className={`rounded-sm border px-3 py-1.5 text-sm ${day === iso(d) ? "border-route bg-route text-white" : "border-rule bg-white hover:border-route"}`}>
-            {d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}
-          </button>
-        ))}
-        <label className="ml-2 inline-flex items-center gap-2 text-sm">
+      {!embedded && <PageHeader title="Schedule" intro="Runs from trip management, with driver names resolved from workforce. Runs the agent moved to a spare are marked." />}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="seg" role="tablist" aria-label="Service day">
+          {days.map((d) => (
+            <button key={iso(d)} role="tab" aria-selected={day === iso(d)} onClick={() => setDay(iso(d))}>
+              {d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}
+            </button>
+          ))}
+        </div>
+        {data && <span className="text-xs text-ink-soft tnum">{data.runs.length} runs</span>}
+        <label className="ml-auto inline-flex items-center gap-2 text-sm">
           <input type="checkbox" checked={changed} onChange={(e) => setChanged(e.target.checked)} className="accent-route" /> Only reassigned runs
         </label>
       </div>

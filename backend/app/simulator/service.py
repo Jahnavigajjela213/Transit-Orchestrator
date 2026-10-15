@@ -267,7 +267,7 @@ async def run_history() -> None:
                 await bus.drain()
         except Exception:
             log.exception("no-show history scenario failed for %s", tenant_id)
-    scenarios = [("ten_mvt", "V-104", "B1342"), ("ten_lsp", "P-205", "U0100")]
+    scenarios = [("ten_mvt", "V-104", "B1342"), ("ten_lsp", "P-203", "U0100")]
     for tenant_id, label, code in scenarios:
         try:
             await inject_fault(tenant_id, label, code)
@@ -291,6 +291,8 @@ async def run_history() -> None:
                 wo = (await s.execute(select(WorkOrder).where(WorkOrder.external_ref == wf.id))).scalar_one_or_none()
             if wo:
                 async with product_session() as s:
+                    if wo.status == "open":
+                        await am.start_work_order(s, tenant_id, wo.id, shop.full_name)
                     await am.close_work_order(s, tenant_id, wo.id, shop.full_name, "Replaced module, cleared codes, road tested")
                 await bus.drain()
         except Exception:

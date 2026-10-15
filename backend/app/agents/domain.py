@@ -29,13 +29,19 @@ class AgentTaskState(TypedDict, total=False):
 
 
 class DomainAgent:
-    def __init__(self, key: str, name: str, system: str, product: str, responsibilities: list[str]):
+    def __init__(self, key: str, name: str, system: str, product: str, responsibilities: list[str], *,
+                 role: str = "", summary: str = "", data: tuple[str, ...] = (), links: tuple[tuple[str, str], ...] = ()):
         self.key, self.name, self.system, self.product = key, name, system, product
         self.responsibilities = responsibilities
+        self.role, self.summary = role, summary  # plain-language role and what it does, for people
+        self.data = data    # product tables it reads and writes (synced to Databricks)
+        self.links = links  # (product name, public website)
         self.graph = self._build()
 
     def describe(self) -> dict:
-        return {"key": self.key, "name": self.name, "system": self.system, "product": self.product, "responsibilities": self.responsibilities}
+        return {"key": self.key, "name": self.name, "system": self.system, "product": self.product, "responsibilities": self.responsibilities,
+                "role": self.role, "summary": self.summary, "data": list(self.data),
+                "links": [{"name": n, "url": u} for n, u in self.links]}
 
     # -------------------------------------------------------------- graph
     def _build(self):
@@ -87,14 +93,33 @@ def _system_actions(system: str) -> set[str]:
 AGENTS: dict[str, DomainAgent] = {
     a.key: a for a in (
         DomainAgent("asset", "Asset agent", "asset_mgmt", "FASTER (asset management)",
-                    ["fault classification and vehicle health", "shop window", "open, cancel and track work orders"]),
+                    ["fault classification and vehicle health", "shop window", "open, cancel and track work orders"],
+                    role="Vehicle repairs",
+                    summary="Checks vehicle faults, identifies maintenance needs, and manages repair work orders and workshop timing.",
+                    data=("am_assets", "am_fault_codes", "am_work_orders", "am_shop_capacity"),
+                    links=(("FASTER", "https://fasterasset.com/about"),)),
         DomainAgent("trip", "Trip agent", "trip_mgmt", "Ecolane / TripMaster (trip management)",
-                    ["runs at risk and spare fleet", "pull and return vehicles", "reassign runs", "ETAs, standby bookings"]),
+                    ["runs at risk and spare fleet", "pull and return vehicles", "reassign runs", "ETAs, standby bookings"],
+                    role="Keeping trips running",
+                    summary="Checks which trips a vehicle problem affects and plans replacements, run reassignment, returns to service and standby bookings.",
+                    data=("tm_vehicles", "tm_runs", "tm_trips", "tm_availability_blocks"),
+                    links=(("Ecolane", "https://www.ecolane.com/"), ("TripMaster", "https://tripmastersoftware.com/"))),
         DomainAgent("workforce", "Workforce agent", "workforce", "Bytecurve (workforce)",
-                    ["driver roster, licences, certifications, hours"]),
+                    ["driver roster, licences, certifications, hours"],
+                    role="Finding the right driver",
+                    summary="Checks driver availability, licence classes, certifications and working hours before a driver is proposed.",
+                    data=("wf_employees",)),
         DomainAgent("safety", "Safety agent", "safety", "Vestige (safety & compliance)",
-                    ["driver compliance (medical card, drug test, training, suspension)", "vehicle defect records"]),
+                    ["driver compliance (medical card, drug test, training, suspension)", "vehicle defect records"],
+                    role="Making sure it's safe",
+                    summary="Checks driver compliance and records vehicle safety defects, so a suspended driver is never proposed and a defect is tracked until cleared.",
+                    data=("sf_drivers", "sf_defects"),
+                    links=(("Vestige", "https://vestigeview.com/"),)),
         DomainAgent("rider_comms", "Rider comms agent", "rider_comms", "TripShot / Passio (rider communications)",
-                    ["rider notifications in each rider's language and channel"]),
+                    ["rider notifications in each rider's language and channel"],
+                    role="Informing passengers",
+                    summary="Notifies affected riders about delays and reassigned trips, in each rider's language and preferred channel.",
+                    data=("rc_riders", "rc_notifications"),
+                    links=(("TripShot", "https://tripshot.com/"), ("Passio", "https://passiotech.com/"))),
     )
 }

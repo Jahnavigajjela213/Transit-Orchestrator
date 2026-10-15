@@ -7,7 +7,7 @@ export interface User {
 
 export type StepStatus =
   | "pending" | "active" | "awaiting_approval" | "waiting" | "done" | "skipped"
-  | "recommended" | "failed" | "compensated" | "not_run" | "shadowed";
+  | "recommended" | "failed" | "compensated" | "not_run" | "shadowed" | "escalated";
 
 export interface Step {
   key: string; label: string; description: string; status: StepStatus;
@@ -83,9 +83,10 @@ export interface WorkflowDetail extends Workflow {
     next: string[]; pending: Record<string, any> | null; work_order: Record<string, any> | null;
     assignments: any[] | null; compensation: any[] | null; failure: Record<string, any> | null; notifications: Record<string, any> | null;
     adjustment?: Record<string, any> | null; recovery?: Record<string, any> | null;
-    defect?: Record<string, any> | null; safety_alert?: string | null;
+    defect?: Record<string, any> | null; safety_alert?: string | null; coverage_gap?: Record<string, any> | null;
   };
   shadow: ShadowRec[];
+  work_order_status: string | null;  // live from maintenance (Postgres), not the Databricks copy
 }
 
 export interface FleetRow {

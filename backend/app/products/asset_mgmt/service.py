@@ -153,6 +153,8 @@ async def close_work_order(s: AsyncSession, tenant_id: str, wo_id: str, closed_b
     wo = await get_work_order(s, tenant_id, wo_id)
     if wo.status in ("closed", "cancelled"):
         raise ProductAPIError(SYSTEM, "close_work_order", f"Work order is already {wo.status}")
+    if wo.status != "in_progress":
+        raise ProductAPIError(SYSTEM, "close_work_order", "Start work on this work order before closing it")
     wo.status = "closed"
     wo.closed_at = now()
     wo.closed_by = closed_by

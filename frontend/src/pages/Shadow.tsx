@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
-import { ago, dayTime, sentence, toLocalInput } from "../lib/format";
+import { ago, dayTime, easternNow, sentence, toLocalInput } from "../lib/format";
 import type { ShadowRec } from "../lib/types";
 import { useToast } from "../components/Toast";
 import { Empty, ErrorNote, Json, Loading, PageHeader, Section, SeverityTag, StatusBadge, Tag, VehicleId } from "../components/ui";
@@ -29,7 +29,7 @@ function describe(r: ShadowRec): string {
 
 function timeLeft(iso: string | null): string {
   if (!iso) return "";
-  const ms = new Date(iso).getTime() - Date.now();
+  const ms = new Date(iso).getTime() - easternNow().getTime();
   if (ms <= 0) return "counts as no action now";
   const h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3);
   return `${h ? `${h} h ` : ""}${m} min left before it counts as no action`;
@@ -153,7 +153,7 @@ export default function Shadow() {
 
       <Section title="Agent compared with people, by step">
         {!summary ? <Loading /> : summary.steps.length === 0 ? (
-          <Empty title="No shadow runs yet">Set the run mode to Shadow on the <Link to="/policies" className="text-route underline">Autonomy policy</Link> screen, then send a fault from the simulator and handle it by hand in the products (Work orders, Schedule).</Empty>
+          <Empty title="No shadow runs yet">Set the run mode to Shadow on the <Link to="/policies" className="text-route underline">Autonomy policy</Link> screen, then report a vehicle fault and handle it by hand in the connected systems (Maintenance, Scheduling).</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="table">

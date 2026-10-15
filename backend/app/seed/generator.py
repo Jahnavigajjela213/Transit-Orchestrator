@@ -34,12 +34,12 @@ MAKES = {"40ft Bus": ("Gillig", "Low Floor 40"), "35ft Bus": ("New Flyer", "Xcel
 
 TENANTS = [
     {"id": "ten_mvt", "code": "MVT", "name": "Metro Valley Transit", "prefix": "V", "start": 101,
-     "fleet": [("40ft Bus", 12), ("35ft Bus", 6), ("Cutaway", 4), ("Paratransit Van", 4)], "spares_per_type": 1, "extra_drivers": 6,
+     "fleet": [("40ft Bus", 15), ("35ft Bus", 9), ("Cutaway", 7), ("Paratransit Van", 7)], "extra_drivers": 22,
      "routes": ["Route 12 Downtown", "Route 22 Eastgate", "Route 7 Harbor", "Route 31 College", "Route 4 Airport", "Route 18 Valley",
                 "Route 9 Medical Ctr", "Route 40 Express", "Route 15 Riverside", "Route 2 Crosstown", "Flex Zone North", "Flex Zone South"],
      "riders": 220, "persona": "mvt-orchestrator-agent"},
     {"id": "ten_lsp", "code": "LSP", "name": "Lakeshore Paratransit", "prefix": "P", "start": 201,
-     "fleet": [("35ft Bus", 2), ("Cutaway", 5), ("Paratransit Van", 13)], "spares_per_type": 1, "extra_drivers": 5,
+     "fleet": [("35ft Bus", 5), ("Cutaway", 8), ("Paratransit Van", 17)], "extra_drivers": 18,
      "routes": ["ADA Zone A", "ADA Zone B", "ADA Zone C", "Dialysis Shuttle", "Senior Loop", "Lakeshore Connector", "Medical Express"],
      "riders": 130, "persona": "lsp-orchestrator-agent"},
 ]
@@ -79,14 +79,10 @@ async def seed(s: AsyncSession, random_seed: int = 42) -> dict:
         s.add(Tenant(id=tid, code=t["code"], name=t["name"], agent_persona=t["persona"]))
         await s.flush()
         from app.models import Policy
+        # Both agencies start from the same policy: a person approves opening the work order, pulling the vehicle and
+        # reassigning its runs, whatever the severity. Admins can give the agent more autonomy on the policy screen.
         s.add(Policy(id=new_id("pol"), tenant_id=tid, workflow_type="vehicle_health", version=1,
-                     rules=DEFAULT_RULES["vehicle_health"] if tid == "ten_mvt" else {
-                         # Lakeshore trusts the agent more for critical faults: opens the work order on its own.
-                         **DEFAULT_RULES["vehicle_health"],
-                         "steps": {**DEFAULT_RULES["vehicle_health"]["steps"],
-                                   "open_work_order": {**DEFAULT_RULES["vehicle_health"]["steps"]["open_work_order"],
-                                                       "by_severity": {"low": "informational", "critical": "autonomous"}}},
-                     }, updated_by="system"))
+                     rules=DEFAULT_RULES["vehicle_health"], updated_by="system"))
         code_l = t["code"].lower()
         for role, title in (("dispatcher", "Dispatcher"), ("shop_manager", "Shop Manager"), ("admin", "Operations Admin"), ("viewer", "Analyst")):
             s.add(User(id=new_id("usr"), tenant_id=tid, email=f"{role.replace('_', '')}@{code_l}.demo", full_name=f"{_name(rng, used_names)}",
@@ -123,12 +119,13 @@ async def seed(s: AsyncSession, random_seed: int = 42) -> dict:
                 vehicles.append({"cid": cid, "label": label, "type": vtype, "trip_code": trip_code, "asset": asset_no, "depot": depot, "cap": cap, "wc": wc})
                 n += 1
 
-        # spares: last N of each type have no runs; the very last spare is already in the shop
+        # spares: about a third of each type (the last ones) have no runs, so the agent always has cover to offer;
+        # the very last spare is already in the shop
         spares, by_type = [], {}
         for v in vehicles:
             by_type.setdefault(v["type"], []).append(v)
         for vtype, vs in by_type.items():
-            spares += vs[-t["spares_per_type"]:]
+            spares += vs[-max(1, len(vs) // 3):]
         in_service = [v for v in vehicles if v not in spares]
         in_shop = spares[-1]
 
@@ -167,11 +164,16 @@ async def seed(s: AsyncSession, random_seed: int = 42) -> dict:
                 lic = "B" if VEHICLE_TYPES[v["type"]][2] == "B" else rng.choice(["B", "C", "C"])
                 certs = ["wheelchair_securement"] + (["air_brakes"] if needs_ab or (lic == "B" and rng.random() < 0.6) else [])
                 slots[(v["cid"], block)] = make_driver(lic, certs, v["depot"])
+        # Extra board: drivers with no run of their own, so spares can be crewed. Most hold a class B licence with wheelchair
+        # securement and air brakes (they can take any vehicle); a few have narrower qualifications to keep the checks honest.
         for i in range(t["extra_drivers"]):
-            lic = rng.choice(["B", "B", "C"])
-            certs = [c for c in ("wheelchair_securement", "air_brakes") if rng.random() < (0.85 if c == "wheelchair_securement" else 0.7)]
-            if lic == "C" and "air_brakes" in certs:
-                certs.remove("air_brakes")
+            if i % 4 != 3:
+                lic, certs = "B", ["wheelchair_securement", "air_brakes"]
+            else:
+                lic = rng.choice(["B", "C"])
+                certs = [c for c in ("wheelchair_securement", "air_brakes") if rng.random() < 0.6]
+                if lic == "C" and "air_brakes" in certs:
+                    certs.remove("air_brakes")
             make_driver(lic, certs, DEPOTS[i % 2])
         # one driver on leave to show the constraint
         await s.flush()

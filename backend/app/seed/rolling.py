@@ -20,7 +20,7 @@ from app.seed.generator import _xw
 
 log = get_logger("rolling_schedule")
 DAYS_BACK, DAYS_AHEAD = 1, 2  # the Schedule page shows yesterday through two days ahead
-INTERVAL_SECONDS = 3600
+INTERVAL_SECONDS = 900  # every 15 min, so a new day is on the calendar soon after midnight
 
 
 def _status(start: datetime, end: datetime, t_now: datetime) -> str:

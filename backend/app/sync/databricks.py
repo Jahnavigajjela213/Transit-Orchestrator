@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from sqlalchemy import delete, func, select, text
 
+from app.core.clock import now as clock_now
 from app.core.config import settings
 from app.core.database import engine, session_scope
 from app.core.databricks import AUDIT_TABLE, SYNCED_TABLES, connect, qualified
@@ -76,14 +77,22 @@ async def install_triggers() -> None:
     if not settings.database_url.startswith("postgresql"):
         return
     async with engine.begin() as conn:
+        missed: list[str] = []
         if settings.databricks_sync:
             await conn.execute(text(CAPTURE_FN))
+            had = {r[0] for r in await conn.execute(text(
+                "SELECT c.relname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid WHERE t.tgname = 'databricks_sync'"))}
+            missed = [t for t in SYNCED_TABLES if t not in had]
         for t in SYNCED_TABLES:
             await conn.execute(text(f'DROP TRIGGER IF EXISTS databricks_sync ON "{t}"'))
             if settings.databricks_sync:
                 pk = (await _columns(conn, t))[1]
                 await conn.execute(text(f'CREATE TRIGGER databricks_sync AFTER INSERT OR UPDATE OR DELETE ON "{t}" '
                                         f"FOR EACH ROW EXECUTE FUNCTION databricks_sync_capture('{pk}')"))
+        if missed:
+            # Changes made while capture was off never reached the outbox: copy those tables in full again.
+            await conn.execute(delete(DatabricksSyncState).where(DatabricksSyncState.table_name.in_(missed)))
+            log.info("Databricks: change capture was off for %d table(s); they will be copied in full", len(missed))
 
 
 _meta: dict[str, tuple[list[tuple[str, str]], str]] = {}
@@ -201,6 +210,41 @@ async def drain_outbox() -> int:
     return len(batch)
 
 
+# ---------------------------------------------------------------- drift check
+RECONCILE_SECONDS = 900
+
+
+def _remote_counts(tables: list[str]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    with connect() as conn, conn.cursor() as cur:
+        for t in tables:
+            try:
+                cur.execute(f"SELECT COUNT(*) FROM {qualified(t)}")
+                out[t] = int(cur.fetchone()[0])
+            except Exception:  # noqa: BLE001  missing table: copy it
+                out[t] = -1
+    return out
+
+
+async def reconcile() -> list[str]:
+    """Safety net: re-copy any table whose row count in Databricks no longer matches Postgres. Skipped while changes
+    are still queued, since those make the counts differ for a moment."""
+    async with session_scope() as s:
+        if (await s.execute(select(func.count()).select_from(DatabricksSyncOutbox))).scalar_one():
+            return []
+        synced = set((await s.execute(select(DatabricksSyncState.table_name))).scalars())
+    tables = [t for t in SYNCED_TABLES if t in synced]  # the audit log is append-only in Databricks: not compared
+    async with engine.connect() as conn:
+        local = {t: (await conn.execute(text(f'SELECT COUNT(*) FROM "{t}"'))).scalar_one() for t in tables}
+    remote = await asyncio.to_thread(_remote_counts, tables)
+    drift = [t for t in tables if remote.get(t) != local[t]]
+    if drift:
+        async with session_scope() as s:
+            await s.execute(delete(DatabricksSyncState).where(DatabricksSyncState.table_name.in_(drift)))
+        log.warning("Databricks: %s out of step with Postgres; copying in full again", ", ".join(drift))
+    return drift
+
+
 class DatabricksSync:
     def __init__(self) -> None:
         self._task: Optional[asyncio.Task] = None
@@ -222,11 +266,16 @@ class DatabricksSync:
 
     async def _loop(self) -> None:
         delay = settings.databricks_sync_interval_seconds
+        last_check = 0.0
+        loop = asyncio.get_running_loop()
         while True:
             try:
+                if loop.time() - last_check >= RECONCILE_SECONDS:
+                    last_check = loop.time()
+                    await reconcile()
                 n = await full_sync_due() + await drain_outbox()
                 if n:
-                    self.last_synced_at = datetime.now()
+                    self.last_synced_at = clock_now()
                 self.last_error, delay = None, settings.databricks_sync_interval_seconds
             except Exception as e:  # noqa: BLE001  keep the outbox; retry with backoff
                 self.last_error = f"{type(e).__name__}: {e}"[:500]
