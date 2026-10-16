@@ -231,7 +231,7 @@ export default function Shadow() {
         <div className="flex flex-wrap items-center gap-2 border-b border-rule px-5 py-4">
           <h2 className="flex-1 text-sm font-semibold">Comparisons</h2>
           {FILTERS.map(([v, l]) => (
-            <button key={l} onClick={() => setStatus(v)} className={`h-[30px] rounded-full px-3 text-xs ${status === v ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>{l}</button>
+            <button key={l} onClick={() => setStatus(v)} className={`h-[30px] rounded-[10px] px-3 text-xs ${status === v ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>{l}</button>
           ))}
         </div>
         {error && <div className="p-4"><ErrorNote message={error} /></div>}

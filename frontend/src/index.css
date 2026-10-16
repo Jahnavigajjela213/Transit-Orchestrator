@@ -45,7 +45,9 @@
 }
 
 @layer base {
-  html { @apply bg-paper text-ink font-sans antialiased; font-size: 14px; }
+  /* Light theme only, always: without this, a dark OS/browser preference renders native controls (the <select>
+     option list, scrollbars) in dark colors even though the app itself never offers a dark mode. */
+  html { @apply bg-paper text-ink font-sans antialiased; font-size: 14px; color-scheme: light; }
   h1, h2, h3, h4 { @apply font-sign tracking-tight; }
   :focus-visible { outline: 2px solid #0B6E69; outline-offset: 2px; }
   .tnum { font-variant-numeric: tabular-nums; }
@@ -54,10 +56,27 @@
   /* No visible scrollbars anywhere: areas still scroll with the wheel, trackpad, touch and keyboard. */
   * { scrollbar-width: none; -ms-overflow-style: none; }
   *::-webkit-scrollbar { display: none; width: 0; height: 0; }
+  /* Exception: a dashboard's own content area. The page itself never scrolls here - only this box does - and a
+     visible bar plus a fading edge make that obvious instead of the content looking like it simply ran out of room. */
+  .dash-scroll { scrollbar-width: thin; scrollbar-color: var(--color-ink-faint) transparent; }
+  .dash-scroll::-webkit-scrollbar { display: block; width: 10px; height: 10px; }
+  .dash-scroll::-webkit-scrollbar-thumb { background-color: var(--color-ink-faint); border-radius: 9999px; border: 2px solid var(--color-paper); }
+  .dash-scroll::-webkit-scrollbar-track { background: transparent; }
+  .dash-scroll {
+    background:
+      linear-gradient(var(--color-paper) 30%, rgba(244, 246, 245, 0)) center top,
+      linear-gradient(rgba(244, 246, 245, 0), var(--color-paper) 70%) center bottom,
+      linear-gradient(rgba(16, 24, 40, 0.1), rgba(16, 24, 40, 0)) center top,
+      linear-gradient(rgba(16, 24, 40, 0), rgba(16, 24, 40, 0.1)) center bottom;
+    background-repeat: no-repeat;
+    background-color: var(--color-paper);
+    background-size: 100% 28px, 100% 28px, 100% 12px, 100% 12px;
+    background-attachment: local, local, scroll, scroll;
+  }
 }
 
 @utility btn {
-  @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 /* Data-heavy pages fit the viewport on desktop: the table scrolls inside its panel and the page itself stays put. */

@@ -8,7 +8,7 @@ import { api } from "../../lib/api";
 import { useToast } from "../../components/Toast";
 import type { AuditRecord, FleetRow } from "../../lib/types";
 import { Empty, ErrorNote, Loading } from "../../components/ui";
-import { DashboardHeader, StatTile, StatTileRow } from "../../components/dashboard/DashboardShell";
+import { ReviewButton, StatTile, StatTileRow, ViewAllButton } from "../../components/dashboard/DashboardShell";
 import { RecentActivity } from "../../components/dashboard/ActivityFeed";
 import { isOverdue, type WO } from "../WorkOrders";
 
@@ -23,15 +23,13 @@ export default function ShopDashboard() {
   const approvals = useOpenWorkOrderApprovals();
 
   const { data: wos, error: woErr, reload: reloadWos } = useData<WO[]>("/products/asset-mgmt/work-orders");
-  const { data: assets, reload: reloadAssets } = useData<{ asset_number: string; unit_label: string }[]>("/products/asset-mgmt/assets");
-  const { data: fleet, reload: reloadFleet } = useData<FleetRow[]>("/api/fleet");
-  const { data: summary, reload: reloadSummary } = useData<SummaryLite>("/api/metrics/summary");
-  const { data: activity, error: activityErr, reload: reloadActivity } = useData<AuditRecord[]>("/api/audit?limit=8");
+  const { data: assets } = useData<{ asset_number: string; unit_label: string }[]>("/products/asset-mgmt/assets");
+  const { data: fleet } = useData<FleetRow[]>("/api/fleet");
+  const { data: summary } = useData<SummaryLite>("/api/metrics/summary");
+  const { data: activity, error: activityErr } = useData<AuditRecord[]>("/api/audit?limit=8");
 
   const label = useMemo(() => Object.fromEntries((assets ?? []).map((a) => [a.asset_number, a.unit_label])), [assets]);
   const vehicleOf = useMemo(() => Object.fromEntries((wos ?? []).filter((w) => w.external_ref).map((w) => [w.external_ref as string, label[w.asset_number] ?? null])), [wos, label]);
-
-  function refresh() { reloadWos(); reloadAssets(); reloadFleet(); reloadSummary(); reloadActivity(); }
 
   const openWos = useMemo(() => (wos ?? []).filter((w) => w.status === "open" || w.status === "in_progress"), [wos]);
   const overdueWos = useMemo(() => openWos.filter(isOverdue), [openWos]);
@@ -78,10 +76,7 @@ export default function ShopDashboard() {
   const dataLoaded = !!wos && !!fleet;
 
   return (
-    <div className="space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
-      <DashboardHeader title="Shop Manager Dashboard"
-        actions={<button type="button" onClick={refresh} className="btn-quiet h-9 px-3 text-[13px]">Refresh</button>} />
-
+    <div className="dash-scroll space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
       <StatTileRow>
         <StatTile label="Open work orders" icon={Wrench} value={wos ? openWos.length : "—"} sub="Open or in progress"
           tone={openWos.length ? "warn" : "good"} onClick={() => nav("/work-orders")} />
@@ -96,8 +91,8 @@ export default function ShopDashboard() {
       <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
         <section className="card flex h-full flex-col p-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Critical maintenance alerts</h2>
-            <button type="button" className="text-[13px] font-medium text-route hover:underline" onClick={() => nav("/work-orders?priority=critical")}>View all</button>
+            <h2 className="text-[15px] font-semibold">Critical maintenance alerts</h2>
+            <ViewAllButton onClick={() => nav("/work-orders?priority=critical")} />
           </div>
           {woErr && <div className="mt-3"><ErrorNote message={woErr} /></div>}
           {!wos ? <div className="mt-2"><Loading /></div> : (() => {
@@ -129,8 +124,8 @@ export default function ShopDashboard() {
 
         <section className="card flex h-full flex-col p-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Work orders requiring attention</h2>
-            <button type="button" className="text-[13px] font-medium text-route hover:underline" onClick={() => nav("/work-orders")}>View all</button>
+            <h2 className="text-[15px] font-semibold">Work orders requiring attention</h2>
+            <ViewAllButton onClick={() => nav("/work-orders")} />
           </div>
           {!wos ? <div className="mt-2"><Loading /></div> : approvals.length === 0 && attentionWos.length === 0 ? (
             <div className="mt-2 flex-1"><Empty title="Nothing needs attention">Every work order is on track.</Empty></div>
@@ -148,7 +143,7 @@ export default function ShopDashboard() {
                       </div>
                       <p className="mt-0.5 text-xs text-ink-soft">Waiting {ago(a.requested_at)}</p>
                     </div>
-                    <button type="button" className="btn-quiet h-8 shrink-0 px-3 text-[12.5px]" onClick={() => nav("/attention")}>Review</button>
+                    <ReviewButton onClick={() => nav("/attention")} />
                   </div>
                 </li>
               ))}
@@ -182,28 +177,22 @@ export default function ShopDashboard() {
       <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
         <section className="card p-4">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-sm font-semibold">Maintenance status overview</h2>
+            <h2 className="text-[15px] font-semibold">Maintenance status overview</h2>
             {dataLoaded && (
-              <div className="flex shrink-0 items-end gap-4 text-right">
-                <div><div className="text-xl font-semibold tnum">{o ? o.vehicles.total - o.vehicles.out_of_service : "—"}</div><div className="text-2xs text-ink-soft">In service</div></div>
-                <div><div className={`text-xl font-semibold tnum ${o?.vehicles.out_of_service ? "text-stop" : ""}`}>{o?.vehicles.out_of_service ?? "—"}</div><div className="text-2xs text-ink-soft">Out of service</div></div>
+              <div className="flex shrink-0 items-stretch gap-2.5 text-right">
+                <div className="rounded-lg bg-go-tint px-3 py-1.5">
+                  <div className="text-xl font-semibold tnum text-go">{o ? o.vehicles.total - o.vehicles.out_of_service : "—"}</div>
+                  <div className="text-2xs text-go">In service</div>
+                </div>
+                <div className="rounded-lg bg-stop-tint px-3 py-1.5">
+                  <div className="text-xl font-semibold tnum text-stop">{o?.vehicles.out_of_service ?? "—"}</div>
+                  <div className="text-2xs text-stop">Out of service</div>
+                </div>
               </div>
             )}
           </div>
           {!dataLoaded ? <div className="mt-2"><Loading /></div> : (
-            <div className="mt-3 grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Work orders by status</h3>
-                <div className="space-y-2">
-                  {([["Open", wosByStatus.open, "bg-signal"], ["In progress", wosByStatus.in_progress, "bg-shop"], ["Closed", wosByStatus.closed, "bg-go"], ["Cancelled", wosByStatus.cancelled, "bg-ink-faint"]] as [string, number, string][]).map(([l, n, bar]) => (
-                    <div key={l} className="flex items-center gap-2">
-                      <span className="w-[72px] shrink-0 text-xs font-medium">{l}</span>
-                      <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[#EEF1F0]"><div className={`h-full rounded-full ${bar}`} style={{ width: `${(wos?.length ? (n / wos.length) * 100 : 0)}%` }} /></div>
-                      <span className="w-5 shrink-0 text-right text-xs font-semibold tnum">{n}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className="mt-3 flex flex-col gap-5">
               <div>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Faults by severity</h3>
                 <div className="space-y-2">
@@ -217,6 +206,18 @@ export default function ShopDashboard() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Work orders by status</h3>
+                <div className="space-y-2">
+                  {([["Open", wosByStatus.open, "bg-signal"], ["In progress", wosByStatus.in_progress, "bg-shop"], ["Closed", wosByStatus.closed, "bg-go"], ["Cancelled", wosByStatus.cancelled, "bg-ink-faint"]] as [string, number, string][]).map(([l, n, bar]) => (
+                    <div key={l} className="flex items-center gap-2">
+                      <span className="w-[72px] shrink-0 text-xs font-medium">{l}</span>
+                      <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[#EEF1F0]"><div className={`h-full rounded-full ${bar}`} style={{ width: `${(wos?.length ? (n / wos.length) * 100 : 0)}%` }} /></div>
+                      <span className="w-5 shrink-0 text-right text-xs font-semibold tnum">{n}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

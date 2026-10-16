@@ -59,7 +59,7 @@ export default function AskPanel({ workflowId, vehicle, agency }: { workflowId: 
         <div role="radiogroup" aria-label="Scope" className="mt-3 flex flex-wrap gap-1.5">
           {([["wf", `This orchestration · ${vehicle ?? ""}`], ["all", `All of ${agency ?? "the agency"}`]] as [Scope, string][]).map(([k, label]) => (
             <button key={k} type="button" role="radio" aria-checked={scope === k} onClick={() => setScope(k)}
-              className={`h-[30px] rounded-full px-3 text-xs ${scope === k ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft hover:text-ink"}`}>{label}</button>
+              className={`h-[30px] rounded-[10px] px-3 text-xs ${scope === k ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft hover:text-ink"}`}>{label}</button>
           ))}
         </div>
       </div>
@@ -111,7 +111,7 @@ export default function AskPanel({ workflowId, vehicle, agency }: { workflowId: 
         <div className="flex flex-wrap gap-1.5">
           {suggestions.map((s) => (
             <button key={s} type="button" disabled={!!asking} onClick={() => ask(s)}
-              className="rounded-full border border-rule bg-white px-2.5 py-1.5 text-left text-xs text-ink-soft hover:border-route/40 hover:text-ink">{s}</button>
+              className="rounded-[10px] border border-rule bg-white px-2.5 py-1.5 text-left text-xs text-ink-soft hover:border-route/40 hover:text-ink">{s}</button>
           ))}
         </div>
         <label className="flex items-center gap-2 rounded-xl border border-reason-line py-1.5 pl-3.5 pr-1.5 focus-within:border-route">

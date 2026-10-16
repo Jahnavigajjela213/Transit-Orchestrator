@@ -1,12 +1,12 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, ClipboardCheck, GitBranch, RefreshCw, ShieldAlert } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, GitBranch, ShieldAlert } from "lucide-react";
 import { useData } from "../../lib/live";
 import { useAttentionQueue } from "../../lib/queue";
 import { ago, dayTime, sentence } from "../../lib/format";
 import type { AuditRecord, Approval, FleetRow, Workflow } from "../../lib/types";
 import { Empty, ErrorNote, Loading } from "../../components/ui";
-import { DashboardHeader, StatTile, StatTileRow } from "../../components/dashboard/DashboardShell";
+import { OpenButton, ReviewButton, StatTile, StatTileRow, ViewAllButton } from "../../components/dashboard/DashboardShell";
 import { RecentActivity } from "../../components/dashboard/ActivityFeed";
 import { STATUS, currentStep, escalated, groupOf } from "../Workflows";
 
@@ -21,12 +21,10 @@ function shortTitle(a: Approval): string {
 
 export default function DispatcherDashboard() {
   const nav = useNavigate();
-  const { data: queueRaw, all, reload: reloadQueue } = useAttentionQueue();
-  const { data: wfs, error: wfErr, reload: reloadWfs } = useData<Workflow[]>("/api/workflows?workflow_type=vehicle_health&limit=500");
-  const { data: fleet, reload: reloadFleet } = useData<FleetLite[]>("/api/fleet");
-  const { data: activity, error: activityErr, reload: reloadActivity } = useData<AuditRecord[]>("/api/audit?limit=8");
-
-  function refresh() { reloadQueue(); reloadWfs(); reloadFleet(); reloadActivity(); }
+  const { data: queueRaw, all } = useAttentionQueue();
+  const { data: wfs, error: wfErr } = useData<Workflow[]>("/api/workflows?workflow_type=vehicle_health&limit=500");
+  const { data: fleet } = useData<FleetLite[]>("/api/fleet");
+  const { data: activity, error: activityErr } = useData<AuditRecord[]>("/api/audit?limit=8");
 
   const liveWfs = useMemo(() => (wfs ?? []).filter((w) => w.status !== "shadow"), [wfs]);
   const vehicleOf = useMemo(() => Object.fromEntries((wfs ?? []).map((w) => [w.id, w.vehicle_label])), [wfs]);
@@ -55,11 +53,7 @@ export default function DispatcherDashboard() {
     (escalated(b) ? 1 : 0) - (escalated(a) ? 1 : 0) || b.started_at.localeCompare(a.started_at)), [activeWfs]);
 
   return (
-    <div className="space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
-      <DashboardHeader
-        title="Dispatcher Dashboard"
-        actions={<button type="button" onClick={refresh} className="btn-quiet flex h-9 items-center gap-1.5 px-3 text-[13px]"><RefreshCw className="h-3.5 w-3.5" aria-hidden />Refresh</button>} />
-
+    <div className="dash-scroll space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
       <StatTileRow>
         <StatTile label="Pending decisions" icon={ClipboardCheck} value={queueRaw ? decidable.length : "—"} sub="Awaiting your approval"
           tone={decidable.length ? "warn" : "good"} onClick={() => nav("/attention")} />
@@ -75,8 +69,8 @@ export default function DispatcherDashboard() {
       <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
         <section className="card flex h-full flex-col p-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Needs your attention</h2>
-            <button type="button" className="text-[13px] font-medium text-route hover:underline" onClick={() => nav("/attention")}>View all</button>
+            <h2 className="text-[15px] font-semibold">Needs your attention</h2>
+            <ViewAllButton onClick={() => nav("/attention")} />
           </div>
           {!queueRaw ? <div className="mt-2"><Loading /></div> : decidable.length === 0 ? (
             <div className="mt-2 flex-1"><Empty title="No operational decisions require your attention" /></div>
@@ -96,7 +90,7 @@ export default function DispatcherDashboard() {
                         <span className="text-[11px] text-ink-faint" title={dayTime(a.requested_at)}>{ago(a.requested_at)}</span>
                       </div>
                     </div>
-                    <button type="button" className="btn-quiet h-8 shrink-0 px-3 text-[12.5px]" onClick={() => nav("/attention")}>Review</button>
+                    <ReviewButton onClick={() => nav("/attention")} />
                   </div>
                 </li>
               ))}
@@ -106,8 +100,8 @@ export default function DispatcherDashboard() {
 
         <section className="card flex h-full flex-col p-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Active orchestrations</h2>
-            <button type="button" className="text-[13px] font-medium text-route hover:underline" onClick={() => nav("/workflows")}>View all</button>
+            <h2 className="text-[15px] font-semibold">Active orchestrations</h2>
+            <ViewAllButton onClick={() => nav("/workflows")} />
           </div>
           {wfErr && <div className="mt-3"><ErrorNote message={wfErr} /></div>}
           {!wfs ? <div className="mt-2"><Loading /></div> : activeSorted.length === 0 ? (
@@ -133,7 +127,7 @@ export default function DispatcherDashboard() {
                           Step {Math.min(idx, 7)}/7 · {step?.label ?? sentence(w.current_step ?? "")} · started {ago(w.started_at)} · {w.runs_covered}/{w.runs_at_risk} runs covered
                         </p>
                       </div>
-                      <button type="button" className="btn-quiet h-8 shrink-0 px-3 text-[12.5px]" onClick={() => nav(`/workflows/${w.id}`)}>Open</button>
+                      <OpenButton onClick={() => nav(`/workflows/${w.id}`)} />
                     </div>
                   </li>
                 );

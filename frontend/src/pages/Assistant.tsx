@@ -207,7 +207,7 @@ export default function Assistant() {
         <button className="rounded-md p-1 text-ink-soft hover:bg-paper lg:hidden" onClick={() => setDrawer(false)} aria-label="Close chat list"><X className="h-4 w-4" /></button>
       </div>
       <div className="px-3 pb-3">
-        <button className="btn-primary w-full justify-center rounded-xl py-2" onClick={newChat}><Plus className="h-4 w-4" aria-hidden /> New chat</button>
+        <button className="btn-primary w-full justify-center py-2" onClick={newChat}><Plus className="h-4 w-4" aria-hidden /> New chat</button>
       </div>
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4" aria-label="Saved chats">
         {chats === null ? <p className="px-2 text-xs text-ink-faint">Loading chats…</p>

@@ -113,7 +113,7 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
                   </span>
                   <span className="text-right">
                     {canAssign && r.status !== "completed" && (
-                      <button className="h-7 rounded-lg border border-rule bg-white px-2.5 text-[11.5px] text-ink-soft" onClick={() => setEditing(editing === r.run_id ? null : r.run_id)}>
+                      <button className="h-7 rounded-[10px] border border-rule bg-white px-2.5 text-[11.5px] text-ink-soft" onClick={() => setEditing(editing === r.run_id ? null : r.run_id)}>
                         {editing === r.run_id ? "Close" : "Reassign"}
                       </button>
                     )}

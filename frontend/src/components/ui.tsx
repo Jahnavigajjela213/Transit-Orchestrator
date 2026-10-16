@@ -1,6 +1,42 @@
-import type { ReactNode } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, ChevronDown, Loader2 } from "lucide-react";
 import { sentence } from "../lib/format";
+
+/** A plain-white, divider-separated list in place of the browser's own (dark-on-some-systems) <select> popup. */
+export function Dropdown({ value, items, onChange, placeholder = "Select…", align = "left", className }: {
+  value: string; items: { id: string; label: string }[]; onChange: (v: string) => void; placeholder?: string; align?: "left" | "right"; className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onEsc);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onEsc); };
+  }, [open]);
+  const current = items.find((o) => o.id === value)?.label ?? placeholder;
+  return (
+    <div ref={ref} className={`relative ${className ?? "min-w-0 flex-1"}`}>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} disabled={items.length === 0}
+        className="input flex h-[34px] w-full items-center justify-between gap-2 text-left text-[13px] text-ink disabled:opacity-60">
+        <span className="truncate">{current}</span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
+      </button>
+      {open && items.length > 0 && (
+        <div role="listbox" className={`absolute ${align === "right" ? "right-0" : "left-0"} top-[calc(100%+6px)] z-20 max-h-72 w-[320px] max-w-[80vw] overflow-y-auto rounded-[10px] border border-rule bg-white shadow-lg`}>
+          {items.map((o) => (
+            <button key={o.id} type="button" role="option" aria-selected={o.id === value} onClick={() => { onChange(o.id); setOpen(false); }}
+              className={`block w-full truncate border-b border-rule-soft px-3 py-2 text-left text-[13px] last:border-b-0 hover:bg-panel ${o.id === value ? "font-semibold text-ink" : "text-ink-soft"}`}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const tone: Record<string, string> = {
   teal: "bg-route-tint text-route-dark",

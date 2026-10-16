@@ -1,40 +1,36 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, GitBranch, ShieldAlert, XCircle } from "lucide-react";
 import { useData } from "../../lib/live";
 import { useAttentionQueue } from "../../lib/queue";
 import { ago, dayTime, sentence } from "../../lib/format";
 import type { AuditRecord, FleetRow, Workflow } from "../../lib/types";
-import { Empty, ErrorNote, Loading, Tag } from "../../components/ui";
-import { DashboardHeader, PeriodSwitch, StatTile, StatTileRow } from "../../components/dashboard/DashboardShell";
+import { Empty, ErrorNote, Loading } from "../../components/ui";
+import { StatTile, StatTileRow, ViewAllButton } from "../../components/dashboard/DashboardShell";
 import { RecentActivity } from "../../components/dashboard/ActivityFeed";
 import { STATUS, groupOf, type Group } from "../Workflows";
-
-interface SummaryLite { audit_mirror: { pending: number; sent: number; failed: number }; events: Record<string, number> }
-interface SystemInfo { adapters: Record<string, { calls: number; errors: number; retries: number }> }
 
 const SEV_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 const sevRank = (s: string | null | undefined) => SEV_RANK[s ?? ""] ?? 2;
 const SEV_DOT: Record<string, string> = { critical: "bg-stop", high: "bg-signal", medium: "bg-route", low: "bg-ink-faint" };
+/** No period switch in the header any more; KPIs read over a fixed trailing window. */
+const DAYS = 28;
 
 interface Alert { id: string; severity: string; title: string; ref?: string; description: string; at: string; onClick?: () => void }
 
 export default function AdminDashboard() {
   const nav = useNavigate();
-  const [days, setDays] = useState<number | null>(28);
 
   const { data: queueRaw, all, escalations } = useAttentionQueue();
   const { data: wfs, error: wfErr } = useData<Workflow[]>("/api/workflows?workflow_type=vehicle_health&limit=500");
   const { data: fleet } = useData<FleetRow[]>("/api/fleet");
-  const { data: summary } = useData<SummaryLite>("/api/metrics/summary");
-  const { data: sys } = useData<SystemInfo>("/api/metrics/system");
   const { data: activity, error: activityErr } = useData<AuditRecord[]>("/api/audit?limit=8");
   const { data: governanceAudit } = useData<AuditRecord[]>("/api/audit?record_type=human_action,policy_change&limit=20");
 
   const liveWfs = useMemo(() => (wfs ?? []).filter((w) => w.status !== "shadow"), [wfs]);
   const vehicleOf = useMemo(() => Object.fromEntries((wfs ?? []).map((w) => [w.id, w.vehicle_label])), [wfs]);
-  const since = days ? Date.now() - days * 86400000 : null;
-  const inPeriod = useMemo(() => (since ? liveWfs.filter((w) => new Date(w.started_at).getTime() >= since) : liveWfs), [liveWfs, since]);
+  const since = Date.now() - DAYS * 86400000;
+  const inPeriod = useMemo(() => liveWfs.filter((w) => new Date(w.started_at).getTime() >= since), [liveWfs, since]);
 
   const activeCount = liveWfs.filter((w) => groupOf(w) === "motion").length;
   const failedCount = inPeriod.filter((w) => w.status === "failed").length;
@@ -48,11 +44,6 @@ export default function AdminDashboard() {
     }));
     return out;
   }, [fleet]);
-
-  const adapterIssues = sys ? Object.values(sys.adapters).filter((a) => a.errors > 0).length : 0;
-  const auditIssues = summary?.audit_mirror.failed ? 1 : 0;
-  const issueCount = adapterIssues + auditIssues;
-  const healthLoaded = !!sys && !!summary;
 
   const chartGroups = (["approval", "motion", "shop", "done", "issues"] as Group[]).map((g) => ({ g, label: STATUS[g][0], n: inPeriod.filter((w) => groupOf(w) === g).length }));
   const chartMax = Math.max(1, ...chartGroups.map((c) => c.n));
@@ -83,23 +74,12 @@ export default function AdminDashboard() {
   }, [all, liveWfs, criticalDefects, governanceAudit, nav]);
 
   return (
-    <div className="space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
-      <DashboardHeader
-        title="Operational Overview"
-        actions={
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Tag color={!healthLoaded ? "grey" : issueCount ? "red" : "green"}>
-              {!healthLoaded ? "Checking…" : issueCount ? `${issueCount} system issue${issueCount === 1 ? "" : "s"}` : "All systems normal"}
-            </Tag>
-            <PeriodSwitch value={days} onChange={setDays} />
-          </div>
-        } />
-
+    <div className="dash-scroll space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
       <StatTileRow>
         <StatTile label="Active orchestrations" icon={GitBranch} value={wfs ? activeCount : "—"} sub="Currently running" onClick={() => nav("/workflows?status=motion")} />
         <StatTile label="Pending approvals" icon={Bell} value={queueRaw ? all.length : "—"} sub={`Awaiting authorized review${escalations ? ` · ${escalations} manual` : ""}`}
           tone={all.length ? "warn" : "good"} onClick={() => nav("/attention")} />
-        <StatTile label="Failed workflows" icon={XCircle} value={wfs ? failedCount : "—"} sub={`Require investigation · ${days ? `${days}d` : "to date"}`}
+        <StatTile label="Failed workflows" icon={XCircle} value={wfs ? failedCount : "—"} sub={`Require investigation · ${DAYS}d`}
           tone={failedCount ? "bad" : "good"} onClick={() => nav("/workflows?status=issues")} />
         <StatTile label="Critical vehicle faults" icon={ShieldAlert} value={fleet ? criticalDefects.length : "—"} sub="Require safety assessment"
           tone={criticalDefects.length ? "bad" : "good"} onClick={() => nav("/work-orders?priority=critical")} />
@@ -108,8 +88,8 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
         <section className="card flex h-full flex-col p-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">Priority alerts</h2>
-            <button type="button" className="text-[13px] font-medium text-route hover:underline" onClick={() => nav("/work-orders")}>View all</button>
+            <h2 className="text-[15px] font-semibold">Priority alerts</h2>
+            <ViewAllButton onClick={() => nav("/work-orders")} />
           </div>
           {wfErr && <div className="mt-3"><ErrorNote message={wfErr} /></div>}
           {!alertsLoaded ? <div className="mt-2"><Loading /></div> : alerts.length === 0 ? (
@@ -134,7 +114,7 @@ export default function AdminDashboard() {
         </section>
 
         <section className="card flex h-full flex-col p-4">
-          <h2 className="text-sm font-semibold">Orchestration health</h2>
+          <h2 className="text-[15px] font-semibold">Orchestration health</h2>
           {!wfs ? <div className="mt-2"><Loading /></div> : inPeriod.length === 0 ? <div className="mt-2 flex-1"><Empty title="No orchestrations in this period" /></div> : (
             <div className="mt-3 flex-1 space-y-2.5">
               {chartGroups.map((c) => (

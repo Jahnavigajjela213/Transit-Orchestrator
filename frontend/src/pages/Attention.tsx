@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ChevronLeft, ChevronRight, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, ChevronLeft, ChevronRight, MoreVertical, Radar, SearchCheck, Shuffle, Sparkles, Truck, Wrench, X } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData, useLive } from "../lib/live";
@@ -287,17 +287,17 @@ export default function Attention() {
                   <span className="flex-1" />
                   <Link to={`/workflows/${current.workflow_id}`} className="mr-1 hidden text-[13px] font-medium md:inline">Open orchestration</Link>
                   {current.kind === "approval" && (
-                    <button type="button" disabled={busy} onClick={() => send("reject")} className="btn-lg border border-stop-line bg-white text-stop hover:bg-stop-tint">
-                      Reject <span className="text-[11px] opacity-60">R</span>
+                    <button type="button" disabled={busy} onClick={() => send("reject")} className="btn-lg border border-rule bg-white text-ink hover:bg-panel">
+                      Reject
                     </button>
                   )}
                   {canChange && (
                     <button type="button" disabled={busy} onClick={() => { if (editing) setOverride(initialOverride(current)); setEditing(!editing); }} className="btn-lg border border-rule bg-white text-ink hover:bg-panel">
-                      {editing ? "Cancel changes" : "Change"} <span className="text-[11px] opacity-60">C</span>
+                      {editing ? "Cancel changes" : "Change"}
                     </button>
                   )}
-                  <button type="button" disabled={busy} onClick={primary} className="btn-lg bg-route px-[22px] font-semibold text-white hover:bg-route-dark">
-                    {esc || current.kind === "informational" ? "Acknowledge" : editing ? "Approve with changes" : "Approve"} <span className="text-[11px] opacity-70">A</span>
+                  <button type="button" disabled={busy} onClick={primary} className="btn-lg bg-signal px-[22px] font-semibold text-white hover:bg-signal/90">
+                    {esc || current.kind === "informational" ? "Acknowledge" : editing ? "Approve with changes" : "Approve"}
                   </button>
                 </>
               ) : (
@@ -316,10 +316,16 @@ function shortTitle(a: Approval): string {
   return a.title.replace(new RegExp(`\\s*(for|on)\\s+${a.vehicle_label}\\b`), "").replace(`${a.vehicle_label} `, "").trim();
 }
 
+const STEP_ICON: Record<string, typeof Radar> = {
+  detect: Radar, assess: SearchCheck, open_work_order: Wrench, pull_vehicle: Truck,
+  reassign_runs: Shuffle, notify_riders: Bell, return_to_service: CheckCircle2,
+};
+
 function StepNode({ step, n, last, travelled, agents, onAgents }: {
   step: Step; n: number; last: boolean; travelled: boolean; agents: string; onAgents?: () => void;
 }) {
   const s = step.status;
+  const Icon = STEP_ICON[step.key] ?? CheckCircle2;
   const red = s === "escalated" || s === "failed";
   const done = s === "done";
   const dot = done ? "bg-route text-white"
@@ -327,17 +333,19 @@ function StepNode({ step, n, last, travelled, agents, onAgents }: {
     : red ? "bg-stop text-white shadow-[0_0_0_6px_#FDECEA]"
     : s === "skipped" || s === "not_run" ? "border-2 border-dashed border-[#C9D1CE] bg-white text-ink-faint"
     : s === "active" || s === "waiting" ? "border-2 border-route bg-white text-route"
-    : "border-2 border-[#C9D1CE] bg-white text-ink-faint";
+    : "border-2 border-[#C9D1CE] bg-rule-soft text-ink-faint";
   const state = s === "awaiting_approval" ? "Your decision" : s === "escalated" ? "Raised with you" : s === "waiting" ? "Waiting on the shop"
     : s === "pending" ? "Not yet" : s === "not_run" ? "Not reached" : sentence(s);
   return (
     <li className="relative flex flex-col items-center text-center" title={step.detail || step.label}>
-      {!last && <span className={`absolute left-1/2 top-[14px] h-[3px] w-full ${travelled ? "bg-route" : "bg-rule"}`} aria-hidden />}
-      <span className={`relative z-10 flex h-[30px] w-[30px] items-center justify-center rounded-full text-xs font-semibold ${dot}`}>{n}</span>
+      {!last && <span className={`absolute left-1/2 top-[14px] h-px w-full ${travelled ? "bg-route" : "bg-rule"}`} aria-hidden />}
+      <span className={`relative z-10 flex h-[30px] w-[30px] items-center justify-center rounded-full ${dot}`} aria-label={`Step ${n}: ${step.label}`}>
+        <Icon className="h-4 w-4" aria-hidden />
+      </span>
       <span className={`mt-2.5 text-[12.5px] font-semibold ${s === "awaiting_approval" ? "text-signal-ink" : red ? "text-stop" : done ? "text-ink" : "text-ink-faint"}`}>{step.label}</span>
       <span className="mt-0.5 text-[11px] text-ink-faint">{state}</span>
       {agents && (
-        <button type="button" onClick={onAgents} className="mt-1.5 rounded-full bg-[#F1F4F3] px-2 py-0.5 text-[10.5px] text-ink-soft hover:bg-route-tint hover:text-route-dark"
+        <button type="button" onClick={onAgents} className="mt-1.5 rounded-full px-2 py-0.5 text-[10.5px] text-ink-soft hover:bg-route-tint hover:text-route-dark"
           aria-label={`${step.label}: show its agents`}>
           {agents}
         </button>
@@ -354,6 +362,8 @@ function ContextDrawer({ open, setOpen, detail, stepKey, cat, ask }: {
   // Keep showing the last panel while it slides shut, so it doesn't go blank mid-animation.
   const [shown, setShown] = useState<DrawerKey | null>(open);
   useEffect(() => { if (open) setShown(open); }, [open]);
+  // The tab strip stays collapsed to a single "more" button until asked to expand.
+  const [railOpen, setRailOpen] = useState(false);
   const view = open ?? shown;
   const delegations: any[] = detail?.context?.delegations || [];
   const stepLabel = detail?.steps.find((s) => s.key === stepKey)?.label ?? sentence(stepKey);
@@ -382,41 +392,46 @@ function ContextDrawer({ open, setOpen, detail, stepKey, cat, ask }: {
   const lgWidth = open ? (open === "ask" ? "lg:w-[400px]" : "lg:w-[320px]") : "lg:w-0";
 
   return (
-    <aside aria-label="Context" className="flex shrink-0 border-l border-rule bg-white">
-      {(
+    <>
+      <aside aria-label="Context" className={`flex shrink-0 bg-white ${open ? "border-l border-rule" : ""}`}>
         <div aria-hidden={!open}
-          className={`flex overflow-hidden border-rule bg-white transition-[width,opacity,transform,visibility] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${lgWidth} max-lg:absolute max-lg:inset-y-0 max-lg:right-16 max-lg:z-20 max-lg:w-[min(400px,calc(100vw-80px))] max-lg:border-l max-lg:shadow-[-16px_0_40px_-24px_rgba(16,24,40,0.35)] max-md:right-14 max-md:w-[calc(100vw-56px)] ${open ? "visible max-lg:translate-x-0 max-lg:opacity-100" : "invisible max-lg:translate-x-6 max-lg:opacity-0"}`}>
-      {view === "ask" && <div className="flex w-full shrink-0 lg:w-[400px]">{ask}</div>}
-      {view && view !== "ask" && (
-        <div className="flex w-full shrink-0 flex-col gap-3.5 overflow-y-auto p-5 lg:w-[320px]">
-          <div className="flex items-center">
-            <h2 className="flex-1 text-[15px] font-semibold">{title}</h2>
-            <button type="button" onClick={() => setOpen(null)} aria-label="Close" className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-[#F1F4F3] text-ink-soft"><X className="h-4 w-4" /></button>
-          </div>
-          {!detail ? <Loading /> : rows.length === 0 ? <p className="text-sm text-ink-soft">{view === "riders" ? "Riders are told once their runs move to a spare vehicle (step 6)." : "Nothing here yet."}</p>
-            : rows.map((d: any, i) => (
-              <div key={i} className="rounded-xl border border-rule px-3.5 py-3">
-                <div className="text-[13px] font-semibold">{d.title}</div>
-                <div className="mt-1 text-xs leading-normal text-ink-soft">{d.body}</div>
-                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-route">
-                  <span className="flex-1">{d.meta}</span>
-                  {d.link && <a href={d.link.url} target="_blank" rel="noreferrer" className="font-medium">{d.link.name} ↗</a>}
+          className={`flex overflow-hidden border-rule bg-white transition-[width,opacity,transform,visibility] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${lgWidth} max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:w-[min(400px,calc(100vw-32px))] max-lg:border-l max-lg:shadow-[-16px_0_40px_-24px_rgba(16,24,40,0.35)] max-md:w-[calc(100vw-32px)] ${open ? "visible max-lg:translate-x-0 max-lg:opacity-100" : "invisible max-lg:translate-x-6 max-lg:opacity-0"}`}>
+        {view === "ask" && <div className="flex w-full shrink-0 lg:w-[400px]">{ask}</div>}
+        {view && view !== "ask" && (
+          <div className="flex w-full shrink-0 flex-col gap-3.5 overflow-y-auto p-5 lg:w-[320px]">
+            <div className="flex items-center">
+              <h2 className="flex-1 text-[15px] font-semibold">{title}</h2>
+              <button type="button" onClick={() => setOpen(null)} aria-label="Close" className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-[#F1F4F3] text-ink-soft"><X className="h-4 w-4" /></button>
+            </div>
+            {!detail ? <Loading /> : rows.length === 0 ? <p className="text-sm text-ink-soft">{view === "riders" ? "Riders are told once their runs move to a spare vehicle (step 6)." : "Nothing here yet."}</p>
+              : rows.map((d: any, i) => (
+                <div key={i} className="rounded-xl border border-rule px-3.5 py-3">
+                  <div className="text-[13px] font-semibold">{d.title}</div>
+                  <div className="mt-1 text-xs leading-normal text-ink-soft">{d.body}</div>
+                  <div className="mt-1.5 flex items-center gap-2 text-[11px] text-route">
+                    <span className="flex-1">{d.meta}</span>
+                    {d.link && <a href={d.link.url} target="_blank" rel="noreferrer" className="font-medium">{d.link.name} ↗</a>}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+          </div>
+        )}
         </div>
-      )}
-        </div>
-      )}
-      <div className="flex w-14 shrink-0 flex-col items-center gap-2 border-l border-[#F1F4F3] py-4 md:w-16">
-        {tabs.map(([k, label, n]) => (
-          <button key={k} type="button" onClick={() => setOpen(open === k ? null : k)} title={label} aria-pressed={open === k}
-            className={`flex h-14 w-11 flex-col items-center justify-center gap-0.5 rounded-xl md:w-[52px] ${open === k ? "bg-route text-white" : "border border-rule bg-white text-ink-soft hover:text-ink"}`}>
+      </aside>
+      {/* Floating trigger: a single "more" button by default, the tab strip stacking up above it only once asked. */}
+      <div className="fixed bottom-24 right-6 z-30 flex flex-col items-end gap-2">
+        {railOpen && tabs.map(([k, label, n]) => (
+          <button key={k} type="button" onClick={() => { setOpen(open === k ? null : k); setRailOpen(false); }} title={label} aria-pressed={open === k}
+            className={`flex h-14 w-11 flex-col items-center justify-center gap-0.5 rounded-xl shadow-[0_6px_16px_rgba(16,24,40,0.18)] md:w-[52px] ${open === k ? "bg-route text-white" : "border border-rule bg-white text-ink-soft hover:text-ink"}`}>
             {n === null ? <Sparkles className="h-4 w-4" aria-hidden /> : <span className="text-[15px] font-semibold tnum">{n}</span>}
             <span className="text-[10px]">{label}</span>
           </button>
         ))}
+        <button type="button" onClick={() => setRailOpen((o) => !o)} aria-expanded={railOpen} aria-label="More context"
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow-[0_8px_20px_rgba(16,24,40,0.22)] ${railOpen ? "bg-route text-white" : "border border-rule bg-white text-ink-soft hover:text-ink"}`}>
+          <MoreVertical className="h-4 w-4" aria-hidden />
+        </button>
       </div>
-    </aside>
+    </>
   );
 }

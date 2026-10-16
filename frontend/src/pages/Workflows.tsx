@@ -178,7 +178,6 @@ function BoardView({ rows }: { rows: Workflow[] }) {
                         {w.severity && <span className={`rounded-full px-[7px] py-0.5 text-[10.5px] font-semibold ${w.severity === "critical" ? "bg-stop-tint text-stop" : w.severity === "high" ? "bg-signal-tint text-signal-ink" : "bg-route-tint text-route-dark"}`}>{sentence(w.severity)}</span>}
                       </span>
                       <span className="mt-2 block text-[13px] font-semibold leading-snug">{w.title.replace(`${w.vehicle_label}: `, "")}</span>
-                      <span className="mt-1.5 block text-[11.5px] text-ink-soft">{w.runs_covered}/{w.runs_at_risk} runs covered · {ago(w.updated_at)}</span>
                       <span className={`mt-2.5 inline-block text-[11px] font-semibold ${esc ? "text-stop" : g === "approval" ? "text-signal-ink" : "text-route"}`}>
                         {esc ? "Manual action" : STATUS[g][0]}
                       </span>

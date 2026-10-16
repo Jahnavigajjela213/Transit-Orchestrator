@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { dayTime, sentence } from "../../lib/format";
 import type { AuditRecord } from "../../lib/types";
 import { Empty, ErrorNote, Loading, Tag } from "../ui";
+import { OpenButton, ViewAllButton } from "./DashboardShell";
 
 // Lined up like a table's columns, without the real-<table> semantics the rest of the app avoids.
 const ACTIVITY_GRID = "grid grid-cols-[124px_76px_minmax(0,1fr)_170px] gap-3";
@@ -23,8 +24,8 @@ export function RecentActivity({ title, viewAllHref, activity, error, vehicleOf 
   return (
     <section className="card p-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        <button type="button" className="text-[13px] font-medium text-route hover:underline" onClick={() => nav(viewAllHref)}>View all</button>
+        <h2 className="text-[15px] font-semibold">{title}</h2>
+        <ViewAllButton onClick={() => nav(viewAllHref)} />
       </div>
       {error && <div className="mt-3"><ErrorNote message={error} /></div>}
       {!activity ? <div className="mt-2"><Loading /></div> : activity.length === 0 ? <div className="mt-2"><Empty title="No activity yet" /></div> : (
@@ -51,7 +52,7 @@ export function RecentActivity({ title, viewAllHref, activity, error, vehicleOf 
                     </span>
                     <span className="flex items-center justify-between gap-2">
                       {showActor ? <Tag color="grey">{r.actor}</Tag> : <span className="truncate text-xs text-ink-soft">{r.actor}</span>}
-                      {r.workflow_id && <button type="button" className="shrink-0 text-xs font-medium text-route hover:underline" onClick={() => nav(`/workflows/${r.workflow_id}`)}>Open</button>}
+                      {r.workflow_id && <OpenButton onClick={() => nav(`/workflows/${r.workflow_id}`)} />}
                     </span>
                   </div>
                 );

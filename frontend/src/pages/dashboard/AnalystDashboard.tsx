@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, FlaskConical, GitBranch, RefreshCw, UserCheck } from "lucide-react";
+import { Eye, FlaskConical, GitBranch, UserCheck } from "lucide-react";
 import { useData } from "../../lib/live";
 import { sentence } from "../../lib/format";
 import type { ShadowRec, Workflow } from "../../lib/types";
-import { DashboardHeader, StatTile, StatTileRow } from "../../components/dashboard/DashboardShell";
+import { StatTile, StatTileRow } from "../../components/dashboard/DashboardShell";
 import { DonutChart, MultiLineChart, type Series } from "../../components/dashboard/charts";
 import { STATUS, escalated, groupOf, type Group } from "../Workflows";
 
@@ -29,7 +29,7 @@ function StatusBars({ title, stats, bars }: {
 }) {
   return (
     <section className="card p-4">
-      <h2 className="text-sm font-semibold">{title}</h2>
+      <h2 className="text-[15px] font-semibold">{title}</h2>
       <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
         {stats.map((s) => (
           <div key={s.label}>
@@ -54,6 +54,19 @@ function StatusBars({ title, stats, bars }: {
   );
 }
 
+/** One rate as its own small horizontal card: the number, then a track-and-fill bar reading the same percentage. */
+function RateCard({ label, pct, color }: { label: string; pct: number | null; color: string }) {
+  return (
+    <div className="rounded-xl border border-rule bg-[#FAFBFA] px-4 py-3.5">
+      <div className="text-xs text-ink-soft">{label}</div>
+      <div className="mt-1 text-xl font-semibold tnum" style={{ color }}>{fmtPct(pct)}</div>
+      <div className="mt-2.5 h-2.5 overflow-hidden rounded-full bg-[#EEF1F0]">
+        <div className="h-full rounded-full" style={{ width: `${pct === null ? 0 : Math.max(2, pct)}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
+
 /** Bucket keys/labels for the selected period: hourly for 24h, daily otherwise. UTC-based, so bucket edges may be
  *  an hour off the agency's own midnight - fine for a trend shape, not for billing-grade reporting. */
 function buckets(periodHours: number): { keys: string[]; labels: string[]; granularity: "hour" | "day" } {
@@ -74,12 +87,10 @@ export default function AnalystDashboard() {
   const nav = useNavigate();
   const periodHours = PERIOD_HOURS;
 
-  const { data: wfs, reload: reloadWfs } = useData<Workflow[]>("/api/workflows?workflow_type=vehicle_health&limit=500");
-  const { data: evals, reload: reloadEvals } = useData<EvalsListing>("/api/evals");
-  const { data: shadowRecs, reload: reloadShadow } = useData<ShadowRec[]>("/api/shadow?limit=500");
-  const { data: shadowSummary, reload: reloadShadowSummary } = useData<ShadowSummary>("/api/shadow/summary");
-
-  function refresh() { reloadWfs(); reloadEvals(); reloadShadow(); reloadShadowSummary(); }
+  const { data: wfs } = useData<Workflow[]>("/api/workflows?workflow_type=vehicle_health&limit=500");
+  const { data: evals } = useData<EvalsListing>("/api/evals");
+  const { data: shadowRecs } = useData<ShadowRec[]>("/api/shadow?limit=500");
+  const { data: shadowSummary } = useData<ShadowSummary>("/api/shadow/summary");
 
   const since = Date.now() - periodHours * 3600_000;
   const liveWfs = useMemo(() => (wfs ?? []).filter((w) => w.status !== "shadow"), [wfs]);
@@ -131,25 +142,13 @@ export default function AnalystDashboard() {
     return { label: STEP_LABEL[s.step] ?? sentence(s.step), pct, color: rateColor(pct) };
   }), [shadowDecidedSteps]);
 
-  // ---- Chart 3b: success vs failure rate, one bar per day with any finished work ----
+  // ---- Chart 3b: success vs failure rate - two side-by-side rate cards ----
   const failureRate = successRate === null ? null : 100 - successRate;
-  const rateBars = useMemo(() => bKeys
-    .map((k, i) => {
-      const bucketEligible = eligible.filter((w) => bucketKey(w.completed_at ?? w.updated_at, granularity) === k);
-      if (bucketEligible.length === 0) return null;
-      const succ = bucketEligible.filter((w) => w.status === "completed").length;
-      const pct = (succ / bucketEligible.length) * 100;
-      return { label: bLabels[i], pct, color: rateColor(pct) };
-    })
-    .filter((b): b is { label: string; pct: number; color: string } => b !== null), [bKeys, bLabels, eligible, granularity]);
 
   const dataLoaded = !!wfs;
 
   return (
-    <div className="space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
-      <DashboardHeader title="Performance Analytics"
-        actions={<button type="button" onClick={refresh} className="btn-quiet flex h-9 items-center gap-1.5 px-3 text-[13px]"><RefreshCw className="h-3.5 w-3.5" aria-hidden />Refresh</button>} />
-
+    <div className="dash-scroll space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
       <StatTileRow>
         <StatTile label="Workflows Evaluated" icon={FlaskConical} value={evals ? evalCases : "—"} sub="Selected reporting period" onClick={() => nav("/evals")} />
         <StatTile label="Workflow Success Rate" icon={GitBranch} value={successRate !== null ? `${successRate.toFixed(1)}%` : "—"} sub="Based on defined outcomes"
@@ -161,13 +160,13 @@ export default function AnalystDashboard() {
 
       <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
         <section className="card p-4">
-          <h2 className="text-sm font-semibold">Workflow performance over time</h2>
+          <h2 className="text-[15px] font-semibold">Workflow performance over time</h2>
           {!dataLoaded ? <p className="mt-3 text-sm text-ink-soft">Loading…</p> : (
             <div className="mt-3"><MultiLineChart series={perfSeries} xLabels={bLabels} height={180} ariaLabel="Workflow performance over time" /></div>
           )}
         </section>
         <section className="card p-4">
-          <h2 className="text-sm font-semibold">Orchestration status distribution</h2>
+          <h2 className="text-[15px] font-semibold">Orchestration status distribution</h2>
           <div className="mt-3">
             <DonutChart centerLabel="orchestrations" ariaLabel="Current orchestration status distribution" size={130}
               segments={chartGroups.map((c) => ({ label: c.label, value: c.n, color: donutColors[c.g] }))} />
@@ -179,9 +178,13 @@ export default function AnalystDashboard() {
         <StatusBars title="AI recommendation vs Shadow Mode"
           stats={[{ label: "Agreed", value: fmtPct(agreedPct), color: COLOR.success }, { label: "Differed", value: fmtPct(differedPct), color: COLOR.failure }]}
           bars={shadowBars} />
-        <StatusBars title="Success vs failure rate"
-          stats={[{ label: "Successful", value: fmtPct(successRate), color: COLOR.success }, { label: "Not successful", value: fmtPct(failureRate), color: COLOR.failure }]}
-          bars={rateBars} />
+        <section className="card p-4">
+          <h2 className="text-[15px] font-semibold">Success vs failure rate</h2>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <RateCard label="Successful" pct={successRate} color={COLOR.success} />
+            <RateCard label="Not successful" pct={failureRate} color={COLOR.failure} />
+          </div>
+        </section>
       </div>
     </div>
   );

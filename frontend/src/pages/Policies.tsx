@@ -125,7 +125,7 @@ export default function Policies() {
                 <span className="text-[12.5px] text-[#24323C]">{fixed ? "—" : (cfg.approver_roles || []).map((r: string) => roleName[r] ?? r).join(" or ") || "—"}</span>
                 {fixed ? <span /> : (
                   <button type="button" onClick={() => setOpenSev(openSev === s.key ? null : s.key)} aria-expanded={openSev === s.key}
-                    className="h-8 rounded-lg border border-rule bg-white text-xs text-ink-soft">{openSev === s.key ? "Hide severity" : "By severity"}</button>
+                    className="h-8 rounded-[10px] border border-rule bg-white text-xs text-ink-soft">{openSev === s.key ? "Hide severity" : "By severity"}</button>
                 )}
               </div>
               {!fixed && openSev === s.key && (

@@ -8,16 +8,20 @@ const TILE_ICON_TONE: Record<"good" | "warn" | "bad" | "default", string> = {
 
 const DOT: Record<"stop" | "signal" | "go" | "route", string> = { stop: "bg-stop", signal: "bg-signal", go: "bg-go", route: "bg-route" };
 
-export function DashboardHeader({ eyebrow, title, readOnly, actions }: { eyebrow?: string; title: string; readOnly?: boolean; actions?: ReactNode }) {
+export function DashboardHeader({ eyebrow, title, readOnly, actions }: { eyebrow?: string; title?: string; readOnly?: boolean; actions?: ReactNode }) {
   return (
-    <header className="flex flex-wrap items-end gap-4">
-      <div className="min-w-[280px] flex-1">
-        {eyebrow && <p className="m-0 text-xs text-ink-faint">{eyebrow}</p>}
-        <h1 className={`${eyebrow ? "mt-1" : ""} flex flex-wrap items-center gap-2.5 text-2xl font-semibold tracking-[-0.01em]`}>
-          {title}
-          {readOnly && <span className="pill bg-[#EEF1F0] text-ink-soft">Read-only</span>}
-        </h1>
-      </div>
+    <header className="flex flex-wrap items-end justify-end gap-4">
+      {(eyebrow || title) && (
+        <div className="min-w-[280px] flex-1">
+          {eyebrow && <p className="m-0 text-xs text-ink-faint">{eyebrow}</p>}
+          {title && (
+            <h1 className={`${eyebrow ? "mt-1" : ""} flex flex-wrap items-center gap-2.5 text-2xl font-semibold tracking-[-0.01em]`}>
+              {title}
+              {readOnly && <span className="pill bg-[#EEF1F0] text-ink-soft">Read-only</span>}
+            </h1>
+          )}
+        </div>
+      )}
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>
   );
@@ -56,15 +60,15 @@ export function StatTile({ label, value, sub, tone, icon: Icon, sparkline, onCli
 }) {
   const color = tone === "bad" ? "text-stop" : tone === "warn" ? "text-signal-ink" : tone === "good" ? "text-go" : "";
   const body = (
-    <div className="flex items-center gap-3">
-      {Icon && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${TILE_ICON_TONE[tone ?? "default"]}`}><Icon className="h-[18px] w-[18px]" aria-hidden /></span>}
+    <div className="flex items-start gap-3">
+      {Icon && <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${TILE_ICON_TONE[tone ?? "default"]}`}><Icon className="h-5 w-5" aria-hidden /></span>}
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <span className="text-xs font-medium text-ink">{label}</span>
+          <span className="block text-[12px] font-medium text-ink">{label}</span>
           {onClick && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />}
         </div>
-        <div className={`mt-1 text-[26px] font-semibold leading-tight tracking-[-0.01em] tnum ${color}`}>{value}</div>
-        <div className="mt-1 flex items-center justify-between gap-2">
+        <div className={`mt-0.5 text-[22px] font-semibold leading-tight tracking-[-0.01em] tnum ${color}`}>{value}</div>
+        <div className="mt-0.5 flex items-center justify-between gap-2">
           {sub ? <span className="min-w-0 truncate text-xs text-ink-faint">{sub}</span> : <span />}
           {sparkline && sparkline.filter((v) => v !== null).length >= 3 && <Sparkline values={sparkline} tone={tone === "bad" ? "stop" : tone === "warn" ? "signal" : "route"} ariaLabel={label} />}
         </div>
@@ -72,10 +76,30 @@ export function StatTile({ label, value, sub, tone, icon: Icon, sparkline, onCli
     </div>
   );
   return onClick ? (
-    <button type="button" onClick={onClick} aria-label={ariaLabel ?? `${label}: ${value}. Open details.`} className="card px-4 py-3.5 text-left transition hover:border-route/40 hover:shadow-sm">{body}</button>
+    <button type="button" onClick={onClick} aria-label={ariaLabel ?? `${label}: ${value}. Open details.`} className="card px-3.5 py-2.5 text-left transition hover:border-route/40 hover:shadow-sm">{body}</button>
   ) : (
-    <div className="card px-4 py-3.5">{body}</div>
+    <div className="card px-3.5 py-2.5">{body}</div>
   );
+}
+
+/** A real bordered button with a trailing arrow - the "see more" action every dashboard section ends with. */
+export function ViewAllButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="btn-quiet inline-flex h-8 shrink-0 items-center gap-1 px-3 text-[12.5px]">
+      View all<ChevronRight className="h-3.5 w-3.5" aria-hidden />
+    </button>
+  );
+}
+
+/** The "go look at this" action - a record that's already in view, not waiting on a decision. */
+export function OpenButton({ onClick, label = "Open" }: { onClick: () => void; label?: string }) {
+  return <button type="button" onClick={onClick} className="h-8 shrink-0 rounded-[10px] bg-go-tint px-3 text-[12.5px] font-semibold text-go hover:bg-go-tint/70">{label}</button>;
+}
+
+/** The "a person needs to decide" action - filled in the same amber used for a pending/needs-approval state,
+ *  so it reads as distinctly more urgent than the neutral Open button next to it. */
+export function ReviewButton({ onClick, label = "Review" }: { onClick: () => void; label?: string }) {
+  return <button type="button" onClick={onClick} className="h-8 shrink-0 rounded-[10px] bg-signal px-3 text-[12.5px] font-semibold text-white hover:bg-signal/90">{label}</button>;
 }
 
 export function StatTileRow({ children }: { children: ReactNode }) {

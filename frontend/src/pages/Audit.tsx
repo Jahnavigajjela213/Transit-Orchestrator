@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Download, X } from "lucide-react";
+import { Download, Search, X } from "lucide-react";
 import { api } from "../lib/api";
 import { useData } from "../lib/live";
 import { dayTime, seconds, sentence, words } from "../lib/format";
 import type { AuditRecord } from "../lib/types";
-import { Empty, ErrorNote, Json, Loading, PageHeader } from "../components/ui";
+import { Dropdown, Empty, ErrorNote, Json, Loading, PageHeader } from "../components/ui";
 
 const ACTORS: [string, string][] = [["", "Everyone"], ["agent", "Agents"], ["human", "People"], ["product", "Products"]];
 const ACTOR_TONE: Record<string, string> = {
@@ -39,6 +39,7 @@ export default function Audit() {
       label: [w.vehicle_label, w.title.replace(`${w.vehicle_label}: `, ""), per[w.vehicle_label ?? ""] > 1 ? dayTime(w.detected_at) : null].filter(Boolean).join(" · "),
     }));
   }, [wfs]);
+  const orchItems = useMemo(() => [{ id: ALL, label: "All orchestrations" }, ...options, { id: NONE, label: "Not tied to an orchestration" }], [options]);
   const rows = useMemo(() => {
     const list = (data || []).filter((r) => sel !== NONE || !r.workflow_id);
     return one ? [...list].reverse() : list;  // one orchestration reads as a trail, oldest first; everything else newest first
@@ -48,28 +49,25 @@ export default function Audit() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader intro="Every event, decision, approval and action, with the evidence behind it. Mirrored to Databricks (Delta)."
-        actions={<button className="btn-lg h-10 border border-rule bg-white px-3.5 text-[13px]" onClick={() => api.download(`/api/audit/export?format=jsonl${one ? `&workflow_id=${one}` : ""}`, one ? `audit_${one}.jsonl` : "audit_log.jsonl")}>
+        actions={<button className="btn-lg h-10 bg-route px-3.5 text-[13px] font-semibold text-white hover:bg-route-dark" onClick={() => api.download(`/api/audit/export?format=jsonl${one ? `&workflow_id=${one}` : ""}`, one ? `audit_${one}.jsonl` : "audit_log.jsonl")}>
           <Download className="h-4 w-4" aria-hidden /> Export JSONL</button>} />
 
       <div className="flex items-start gap-4">
         <section className="card flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* toolbar: who acted and search on the left, which orchestration on the right */}
+          {/* toolbar: search on the left, who acted next, which orchestration on the right */}
           <div className="flex flex-wrap items-center gap-1.5 border-b border-rule px-4 py-3">
-            {ACTORS.map(([v, l]) => (
-              <button key={l} onClick={() => setActor(v)} className={`h-[34px] rounded-full px-3.5 text-[12.5px] ${actor === v ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>{l}</button>
-            ))}
-            <label className="ml-1">
+            <label className="relative">
               <span className="sr-only">Search explanations</span>
-              <input className="input h-[34px] w-52 rounded-full" placeholder="Search explanations" value={q} onChange={(e) => setQ(e.target.value)} />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" aria-hidden />
+              <input className="input h-[34px] w-52 rounded-[10px] pl-8" placeholder="Search explanations" value={q} onChange={(e) => setQ(e.target.value)} />
             </label>
+            {ACTORS.map(([v, l]) => (
+              <button key={l} onClick={() => setActor(v)} className={`h-[34px] rounded-[10px] px-3.5 text-[12.5px] ${actor === v ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>{l}</button>
+            ))}
             <span className="flex-1" />
             <label className="flex min-w-[260px] max-w-full items-center gap-2 text-xs text-ink-soft">
               <span className="shrink-0">Orchestration</span>
-              <select value={sel ?? ""} onChange={(e) => { setSel(e.target.value); setPicked(null); }} className="input h-[34px] min-w-0 flex-1 text-[13px] text-ink">
-                <option value={ALL}>All orchestrations</option>
-                {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-                <option value={NONE}>Not tied to an orchestration</option>
-              </select>
+              <Dropdown value={sel ?? ALL} items={orchItems} onChange={(v) => { setSel(v); setPicked(null); }} align="right" />
             </label>
             {one && <Link to={`/workflows/${one}`} className="text-xs font-medium">Open</Link>}
           </div>
