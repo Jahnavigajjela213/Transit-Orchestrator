@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ChevronRight, Search } from "lucide-react";
 import { useData } from "../lib/live";
 import { ago, dayTime, sentence } from "../lib/format";
@@ -8,18 +8,18 @@ import { Empty, ErrorNote, Loading } from "../components/ui";
 
 const STEPS = ["Detect", "Assess", "Open work order", "Pull vehicle", "Reassign runs", "Notify riders", "Return to service"];
 
-type Group = "approval" | "motion" | "shop" | "done" | "issues";
-const FILTERS: [Group | "all", string][] = [
+export type Group = "approval" | "motion" | "shop" | "done" | "issues";
+export const FILTERS: [Group | "all", string][] = [
   ["all", "All"], ["approval", "Needs approval"], ["motion", "In motion"], ["shop", "In the shop"], ["done", "Completed"], ["issues", "With issues"],
 ];
-const groupOf = (w: Workflow): Group =>
+export const groupOf = (w: Workflow): Group =>
   w.status === "awaiting_approval" ? "approval"
     : w.status === "awaiting_event" ? "shop"
     : w.status === "completed" ? "done"
     : ["completed_with_issues", "compensated", "failed", "rejected"].includes(w.status) ? "issues"
     : "motion";
 
-const STATUS: Record<Group, [string, string]> = {
+export const STATUS: Record<Group, [string, string]> = {
   approval: ["Needs approval", "bg-signal-tint text-signal-ink"],
   motion: ["Assessing", "bg-route-tint text-route-dark"],
   shop: ["In the shop", "bg-shop-tint text-shop"],
@@ -29,18 +29,23 @@ const STATUS: Record<Group, [string, string]> = {
 const SEV: Record<string, string> = { critical: "text-stop", high: "text-signal-ink", medium: "text-route-dark", low: "text-ink-soft" };
 
 /** Index of the step the orchestration is on (1..7); 8 when every step is behind it. */
-function currentStep(w: Workflow): number {
+export function currentStep(w: Workflow): number {
   if (w.status === "completed") return 8;
   const i = w.steps.findIndex((s) => ["awaiting_approval", "active", "waiting", "escalated", "failed"].includes(s.status));
   if (i >= 0) return i + 1;
   const last = w.steps.reduce((acc, s, k) => (["done", "skipped", "compensated", "recommended", "shadowed"].includes(s.status) ? k : acc), -1);
   return Math.min(last + 2, 8);
 }
-const escalated = (w: Workflow) => w.steps.some((s) => s.status === "escalated" || s.status === "failed");
+export const escalated = (w: Workflow) => w.steps.some((s) => s.status === "escalated" || s.status === "failed");
 
 export default function Workflows() {
+  const [params] = useSearchParams();
   const [view, setView] = useState<"list" | "board">("list");
-  const [filter, setFilter] = useState<Group | "all">("all");
+  // A dashboard KPI can land here pre-filtered, e.g. /workflows?status=issues.
+  const [filter, setFilter] = useState<Group | "all">(() => {
+    const s = params.get("status");
+    return FILTERS.some(([key]) => key === s) ? (s as Group | "all") : "all";
+  });
   const [q, setQ] = useState("");
   const { data, error } = useData<Workflow[]>("/api/workflows?workflow_type=vehicle_health&limit=200");
 

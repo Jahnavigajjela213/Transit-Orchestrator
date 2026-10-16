@@ -1,27 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Bell, ChevronRight, ClipboardList, Eye, FlaskConical, GitBranch, LogOut, Menu, PanelLeft, ShieldCheck, Wrench, X } from "lucide-react";
+import { ChevronRight, LogOut, Menu, PanelLeft, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
-import { useData, useLive } from "../lib/live";
+import { useLive } from "../lib/live";
+import { useAttentionQueue } from "../lib/queue";
 import { CrumbsContext, type Crumb } from "../lib/topbar";
 import { clockET, roleName } from "../lib/format";
-import type { Approval } from "../lib/types";
-
-// The module rail of the concepts canvas: every module is always listed as an icon; expanding adds the names.
-const groups: { to: string; label: string; icon: any; badge?: boolean }[][] = [
-  [
-    { to: "/", label: "Needs your attention", icon: Bell, badge: true },
-    { to: "/workflows", label: "Orchestrations", icon: GitBranch },
-    { to: "/work-orders", label: "Maintenance", icon: Wrench },
-  ],
-  [
-    { to: "/policies", label: "Autonomy policy", icon: ShieldCheck },
-    { to: "/shadow", label: "Shadow mode", icon: Eye },
-    { to: "/measures", label: "Pilot measures", icon: BarChart3 },
-    { to: "/audit", label: "Audit log", icon: ClipboardList },
-  ],
-  [{ to: "/simulate", label: "Simulate", icon: FlaskConical }],
-];
+import { visibleModules } from "../lib/modules";
 
 const RAIL_KEY = "tto_rail_open";
 const initials = (name?: string) => (name || "?").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -40,17 +25,17 @@ export default function Layout() {
   useEffect(() => setMobile(false), [pathname]);
   const open = railOpen || mobile;
   useEffect(() => { try { localStorage.setItem(RAIL_KEY, railOpen ? "1" : "0"); } catch { /* private mode */ } }, [railOpen]);
-  const { data: pending } = useData<Approval[]>("/api/approvals?status=pending");
-  const { data: wfs } = useData<{ id: string }[]>("/api/workflows?workflow_type=vehicle_health&limit=200");
-  // count only vehicle-health items, the same ones the attention screen lists
-  const ids = new Set((wfs || []).map((w) => w.id));
-  const count = wfs ? (pending || []).filter((a) => ids.has(a.workflow_id)).length : 0;
+  // Same hook the Focus Queue itself reads: the badge always equals the queue's own count, for any role.
+  const { all } = useAttentionQueue();
+  const count = all.length;
+  const visibleGroups = visibleModules(user?.role);
   const Label = ({ children }: { children: ReactNode }) => (open ? <span className="flex-1 truncate">{children}</span> : null);
-  const home = pathname === "/";
+  // The Focus Queue is the one full-bleed screen; everything else, including the Dashboard, scrolls in a normal page.
+  const home = pathname === "/attention";
   const [crumbs, setCrumbs] = useState<Crumb[] | null>(null);
-  const page = groups.flat().find((it) => (it.to === "/" ? home : pathname.startsWith(it.to)));
-  // Screens that fit the window from tablet width up: the page stays put and their panels scroll inside themselves.
-  const fit = ["/work-orders"].includes(pathname);
+  const page = visibleGroups.flat().find((it) => (it.to === "/" ? pathname === "/" : pathname.startsWith(it.to)));
+  // Screens that fit the window from tablet width up: the page stays put and their content scrolls inside itself.
+  const fit = ["/work-orders", "/"].includes(pathname);
 
   return (
     <div className="flex h-[100dvh] flex-col bg-paper text-ink md:flex-row">
@@ -62,8 +47,8 @@ export default function Layout() {
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-route">
           <svg width="16" height="16" viewBox="0 0 32 32" aria-hidden><circle cx="9" cy="16" r="3.5" fill="#fff" /><circle cx="23" cy="16" r="3.5" fill="#fff" /><rect x="9" y="14.5" width="14" height="3" fill="#fff" /></svg>
         </span>
-        <span className="flex-1 truncate text-[15px] font-semibold">{groups.flat().find((it) => (it.to === "/" ? home : pathname.startsWith(it.to)))?.label ?? "TransitTechOS"}</span>
-        {count > 0 && <NavLink to="/" className="flex h-7 min-w-7 items-center justify-center rounded-full bg-signal px-2 text-xs font-bold tnum" aria-label={`${count} decisions waiting`}>{count}</NavLink>}
+        <span className="flex-1 truncate text-[15px] font-semibold">{visibleGroups.flat().find((it) => (it.to === "/" ? pathname === "/" : pathname.startsWith(it.to)))?.label ?? "TransitTechOS"}</span>
+        {count > 0 && <NavLink to="/attention" className="flex h-7 min-w-7 items-center justify-center rounded-full bg-signal px-2 text-xs font-bold tnum" aria-label={`${count} decisions waiting`}>{count}</NavLink>}
       </header>
       {mobile && <button type="button" aria-label="Close the menu" onClick={() => setMobile(false)} className="fixed inset-0 z-40 bg-ink/50 md:hidden" tabIndex={-1} />}
       <nav aria-label="Modules" className={`flex-col gap-1 overflow-y-auto bg-rail px-2.5 py-3.5 text-[#C9D3DA] ${mobile ? "fixed inset-y-0 left-0 z-50 flex w-[260px] shadow-2xl" : `hidden shrink-0 transition-[width] duration-150 md:flex ${railOpen ? "w-[232px]" : "w-[68px]"}`}`}>
@@ -89,7 +74,7 @@ export default function Layout() {
             </button>
           )}
         </div>
-        {groups.map((g, gi) => (
+        {visibleGroups.map((g, gi) => (
           <div key={gi} className="flex flex-col gap-1">
             {gi > 0 && <div className="mx-1.5 my-2 h-px bg-rail-line" aria-hidden />}
             {g.map((it) => (
@@ -99,8 +84,12 @@ export default function Layout() {
                   <>
                     <it.icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
                     <Label><span className={isActive ? "text-white" : ""}>{it.label}</span></Label>
-                    {it.badge && count > 0 && (
-                      <span className="absolute left-[26px] top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-signal px-1 text-[10px] font-bold text-white tnum">{count}</span>
+                    {/* Expanded: a static pill at the end of the row, never on top of the label. Collapsed: a bare dot on the icon. */}
+                    {it.badge && count > 0 && open && (
+                      <span className="ml-auto flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-signal px-1.5 text-[10px] font-bold text-white tnum">{count}</span>
+                    )}
+                    {it.badge && count > 0 && !open && (
+                      <span className="absolute left-[26px] top-1.5 h-2 w-2 rounded-full bg-signal ring-2 ring-rail" aria-hidden />
                     )}
                   </>
                 )}

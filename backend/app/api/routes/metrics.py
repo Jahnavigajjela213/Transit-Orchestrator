@@ -355,6 +355,24 @@ async def put_baseline(body: BaselineIn, s: SessionDep, user: User = Depends(req
     return await baseline_for(s, user.tenant_id)
 
 
+@router.get("/system")
+async def system_health(user: User = Depends(require_roles("admin"))):
+    """Everything the Operations admin dashboard's "System health" panel needs that `/api/system/info` does not
+    already carry: calls/errors/retries per connected product, this run. Composes existing config/adapter state
+    rather than a new data source."""
+    from app.adapters.resilience import adapter_stats
+    from app.agents import AGENTS
+    from app.core.config import settings
+    from app.llm.router import llm
+
+    return {"app": settings.app_name, "environment": settings.environment, "event_bus": settings.event_bus,
+            "llm_provider": llm.primary.name, "adapter_mode": settings.adapter_mode, "audit_mirror": settings.audit_mirror,
+            "database": "postgresql" if settings.is_postgres else "sqlite", "slm_provider": llm.slm.name,
+            "auth_mode": settings.auth_mode, "eventbridge_inbound": bool(settings.eventbridge_sqs_queue_url),
+            "agents": [a.describe() for a in AGENTS.values()], "live_connections": hub.connections,
+            "adapters": adapter_stats()}
+
+
 async def _measure_from_shadow(s, tenant_id: str) -> tuple[dict, int]:
     """What people did by hand in shadow-mode incidents: the agency's real way of working, measured."""
     from datetime import datetime as _dt

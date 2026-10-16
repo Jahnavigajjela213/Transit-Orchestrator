@@ -30,6 +30,14 @@ export function toLocalInput(iso?: string | null): string {
 
 export const clockET = () => easternNow().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
+/** A duration in minutes, the way a person reads it: whole minutes under an hour, "H h M min" above it. */
+export function fmtMin(m: number | null | undefined): string {
+  if (m == null) return "not set";
+  if (m >= 60) return `${Math.floor(m / 60)} h ${Math.round(m % 60)} min`;
+  return `${Math.round(m)} min`;
+}
+export const pct = (v: number | null | undefined, digits = 1) => (v === null || v === undefined ? "—" : `${v.toFixed(digits)}%`);
+
 export const roleName: Record<string, string> = {
   dispatcher: "Dispatcher", shop_manager: "Shop manager", admin: "Operations admin", viewer: "Analyst",
 };

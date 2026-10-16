@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
@@ -7,11 +7,14 @@ import { easternNow } from "../lib/format";
 import { useToast } from "../components/Toast";
 import { ErrorNote, Loading, PageHeader } from "../components/ui";
 
-interface WO {
+export interface WO {
   id: string; asset_number: string; status: string; priority: string; fault_code: string | null; title: string; description: string;
   source: string; shop_depot: string | null; shop_start: string | null; shop_end: string | null; external_ref: string | null;
   created_by: string; created_at: string; closed_at: string | null; closed_by: string | null; resolution: string | null;
 }
+
+/** Still open and past the end of its own shop window - the shop's own definition of overdue, nothing invented. */
+export const isOverdue = (w: WO) => (w.status === "open" || w.status === "in_progress") && !!w.shop_end && new Date(w.shop_end).getTime() < Date.now();
 
 const PRIO: Record<string, string> = { critical: "bg-stop-tint text-stop", high: "bg-signal-tint text-signal-ink", medium: "bg-route-tint text-route-dark", low: "bg-[#EEF1F0] text-ink-soft" };
 // The first lane names its contents: "Work order" for one, "Work orders" otherwise. Each heading carries a count pill in its lane's tone.
@@ -42,10 +45,15 @@ export default function WorkOrders() {
   const isShop = user?.role === "shop_manager" || user?.role === "admin";
   const [done, setDone] = useState<Record<string, WO>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  // A dashboard KPI can land here pre-filtered, e.g. /work-orders?priority=critical or ?overdue=1.
+  const [params] = useSearchParams();
+  const priorityFilter = params.get("priority");
+  const overdueOnly = params.get("overdue") === "1";
 
   const today = ymd(easternNow());
   const lanes = useMemo(() => {
-    const rows = (data || []).map((w) => (done[w.id] && RANK[done[w.id].status] > RANK[w.status] ? done[w.id] : w));
+    const rows = (data || []).map((w) => (done[w.id] && RANK[done[w.id].status] > RANK[w.status] ? done[w.id] : w))
+      .filter((w) => (!priorityFilter || w.priority === priorityFilter) && (!overdueOnly || isOverdue(w)));
     return LANES.map((l) => ({
       ...l,
       cards: rows.filter((w) => l.key === "closed"
@@ -53,7 +61,7 @@ export default function WorkOrders() {
         : w.status === l.key)
         .sort((a, b) => (RANK[a.status] === 2 ? (b.closed_at ?? "").localeCompare(a.closed_at ?? "") : b.created_at.localeCompare(a.created_at))),
     }));
-  }, [data, done, today]);
+  }, [data, done, today, priorityFilter, overdueOnly]);
 
   async function act(wo: WO, action: "start" | "close") {
     setBusy(wo.id);
@@ -66,7 +74,13 @@ export default function WorkOrders() {
 
   return (
     <>
-      <PageHeader intro="Start work first, then close it. Closing an agent-opened work order returns the vehicle to the schedule automatically." />
+      <PageHeader intro="Start work first, then close it. Closing an agent-opened work order returns the vehicle to the schedule automatically."
+        badge={(priorityFilter || overdueOnly) && (
+          <span className="pill bg-[#EEF1F0] text-ink-soft">
+            {[priorityFilter && `${sentenceCase(priorityFilter)} priority`, overdueOnly && "Overdue"].filter(Boolean).join(" · ")} only
+            <Link to="/work-orders" className="ml-1.5 font-semibold text-route hover:underline">Clear ✕</Link>
+          </span>
+        )} />
 
       {error && <ErrorNote message={error} />}
       {!data ? <div className="card"><Loading /></div> : (

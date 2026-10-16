@@ -1,0 +1,387 @@
+<title>TransitTechOS Role Dashboards</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: collapsible module rail + one calm workspace per role: briefing line → 4 tiles → one focus area → "More views" launcher that opens panels in a slide-over only on request. Palette taken from the project's own index.css. */
+:root{
+  --paper:#F4F6F5; --panel:#F8FAF9; --card:#FFFFFF; --ink:#111A20; --ink-soft:#4B5862; --ink-faint:#7D8891;
+  --rule:#E2E6E4; --rule-soft:#F1F4F3;
+  --route:#0B6E69; --route-dark:#08524E; --route-tint:#E1F0EE; --reason-line:#CFE5E1;
+  --signal:#D98A00; --signal-ink:#9A5B00; --signal-tint:#FDF1DC;
+  --stop:#B42318; --stop-tint:#FDECEA; --go:#1F6B40; --go-tint:#E4F2E9; --shop:#3B4CB8; --shop-tint:#EEF2FF;
+  --rail:#0E1B26; --rail-hover:#1C2E3B; --rail-line:#22333F; --rail-ink:#C9D3DA; --rail-active:#5FD3C8;
+  --scrim:rgba(17,26,32,.45); --shadow:0 18px 50px rgba(14,27,38,.18);
+  color-scheme:light; --sans:"IBM Plex Sans","Segoe UI",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--route);outline-offset:2px}
+.tnum{font-variant-numeric:tabular-nums}
+h1,h2,h3{text-wrap:balance;margin:0;letter-spacing:-.01em}
+.app{display:flex;height:100%}
+
+/* ---------- rail ---------- */
+.rail{width:68px;flex-shrink:0;background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;gap:4px;padding:14px 10px;transition:width .16s ease;overflow-y:auto;overflow-x:hidden}
+.rail.open{width:232px}
+.rail .brand{display:flex;align-items:center;gap:10px;padding:2px 6px 16px}
+.logo{width:32px;height:32px;border-radius:9px;background:#0B6E69;display:grid;place-items:center;flex-shrink:0}
+.rail .name{font-weight:600;color:#fff;font-size:15px;white-space:nowrap;flex:1}
+.rail .tog{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:#8FA0AC;flex-shrink:0}
+.rail .tog:hover{background:rgba(255,255,255,.08);color:#fff}
+.rail:not(.open) .name,.rail:not(.open) .lbl,.rail:not(.open) .who{display:none}
+.rail:not(.open) .brand{flex-direction:column}
+.nav{position:relative;display:flex;align-items:center;gap:12px;height:44px;padding:0 13px;border-radius:10px;color:var(--rail-ink);white-space:nowrap;text-align:left;width:100%}
+.nav:hover{background:rgba(255,255,255,.05);color:#fff}
+.nav.on{background:var(--rail-hover);color:var(--rail-active)}
+.nav.on .lbl{color:#fff}
+.nav svg{width:18px;height:18px;flex-shrink:0}
+.nav .badge{position:absolute;left:27px;top:6px;min-width:16px;height:16px;border-radius:99px;background:#D98A00;color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;padding:0 4px}
+.sep{height:1px;background:var(--rail-line);margin:8px 6px}
+.me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:6px}
+.av{width:32px;height:32px;border-radius:50%;background:var(--rail-line);color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center;flex-shrink:0}
+.who{font-size:12px;line-height:1.3;min-width:0}.who b{display:block;color:#fff;font-weight:500}
+
+/* ---------- main ---------- */
+main{flex:1;min-width:0;overflow-y:auto}
+.wrap{max-width:1280px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:22px 48px;display:flex;flex-direction:column;gap:18px}
+@media (min-width:900px){.wrap{padding-left:max(32px,env(safe-area-inset-left,0px));padding-right:max(32px,env(safe-area-inset-right,0px))}}
+.mobilebar{display:none}
+.preview{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;border:1px dashed var(--rule);border-radius:12px;background:var(--panel)}
+.preview .note{font-size:12px;color:var(--ink-faint);flex:1;min-width:180px}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--rule);border-radius:10px;padding:3px;background:var(--card);gap:2px}
+.seg button{height:30px;padding:0 12px;border-radius:7px;font-size:12.5px;color:var(--ink-soft)}
+.seg button[aria-checked="true"],.seg button[aria-selected="true"]{background:var(--ink);color:var(--paper);font-weight:600}
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px}
+.head .t{flex:1;min-width:240px}
+.eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint);font-weight:500}
+.head h1{font-size:26px;font-weight:600;margin-top:4px}
+.ro{font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--rule-soft);color:var(--ink-soft);margin-left:8px;vertical-align:middle;letter-spacing:0}
+
+/* briefing line */
+.brief{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:14px 18px;border-radius:14px;background:var(--card);border:1px solid var(--rule)}
+.brief .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.brief p{margin:0;flex:1;min-width:220px;line-height:1.5}
+.brief p b{font-weight:600}
+.btn{height:36px;padding:0 14px;border-radius:9px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.pri{background:var(--route);color:#fff}.btn.pri:hover{background:var(--route-dark)}
+.btn.q{border:1px solid var(--rule);background:var(--card)}.btn.q:hover{background:var(--panel)}
+.btn.no{border:1px solid var(--rule);color:var(--stop);background:var(--card)}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media (max-width:980px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;text-align:left}
+button.tile:hover{border-color:var(--reason-line)}
+.tile .l{font-size:12px;color:var(--ink-soft)}
+.tile .v{font-size:27px;font-weight:600;letter-spacing:-.01em}
+.tile .s{font-size:12px;color:var(--ink-faint)}
+.tile svg{margin-top:6px}
+.good{color:var(--go)}.warn{color:var(--signal-ink)}.bad{color:var(--stop)}
+
+/* focus */
+.focus{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px}
+@media (max-width:1080px){.focus{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:14px;overflow:hidden;min-width:0}
+.card>header{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.card>header h2{font-size:14px;font-weight:600;flex:1}
+.card>header .sub{font-size:12px;color:var(--ink-faint)}
+.link{font-size:13px;font-weight:500;color:var(--route)}
+.body{padding:16px 18px}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.p-stop{background:var(--stop-tint);color:var(--stop)}.p-sig{background:var(--signal-tint);color:var(--signal-ink)}.p-go{background:var(--go-tint);color:var(--go)}
+.p-route{background:var(--route-tint);color:var(--route-dark)}.p-shop{background:var(--shop-tint);color:var(--shop)}.p-n{background:var(--rule-soft);color:var(--ink-soft)}
+.steps{display:flex;gap:3px;margin:12px 0}
+.steps span{flex:1;height:6px;border-radius:3px;background:var(--rule)}
+.steps span.d{background:var(--route)}.steps span.c{background:var(--signal)}
+.reason{background:var(--route-tint);border:1px solid var(--reason-line);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.55;color:var(--ink)}
+.reason b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--route-dark);margin-bottom:4px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
+.kbd{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-left:auto}
+.mono{font-family:var(--mono);font-size:12px}
+.chart{width:100%;height:auto;display:block}
+.chart text{fill:var(--ink-faint);font-family:var(--sans);font-size:11px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--ink-soft);padding:0 18px 14px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.rows{display:flex;flex-direction:column}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 18px;border-top:1px solid var(--rule-soft)}
+.row:first-child{border-top:0}
+.row .m{font-weight:500}.row .d{font-size:12px;color:var(--ink-faint);margin-top:2px}
+.bar{height:8px;border-radius:4px;background:var(--rule-soft);overflow:hidden}.bar i{display:block;height:100%;border-radius:4px}
+
+/* launcher */
+.more h2{font-size:14px;font-weight:600}
+.more .hint{font-size:12px;color:var(--ink-faint);margin-top:2px}
+.launch{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px}
+.lc{display:flex;gap:12px;align-items:flex-start;text-align:left;padding:13px 14px;border:1px solid var(--rule);border-radius:12px;background:var(--card)}
+.lc:hover{border-color:var(--reason-line);background:var(--panel)}
+.lc .ic{width:34px;height:34px;border-radius:9px;background:var(--route-tint);color:var(--route-dark);display:grid;place-items:center;flex-shrink:0}
+.lc .ic svg{width:17px;height:17px}
+.lc .tt{font-weight:600;font-size:13px}
+.lc .hh{font-size:12px;color:var(--ink-faint);margin-top:2px;line-height:1.4}
+.lc .ct{margin-left:auto;font-weight:600;font-size:13px}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--card);z-index:50;box-shadow:var(--shadow);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px);animation:slide .18s ease}
+@keyframes slide{from{transform:translateX(24px);opacity:.6}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.drawer{animation:none}.rail{transition:none}}
+.drawer header{display:flex;gap:12px;align-items:flex-start;padding:18px 20px;border-bottom:1px solid var(--rule)}
+.drawer header h2{font-size:17px;font-weight:600}
+.drawer header p{margin:4px 0 0;font-size:13px;color:var(--ink-soft);line-height:1.5}
+.drawer .x{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;margin-left:auto;flex-shrink:0}
+.drawer .x:hover{background:var(--panel)}
+.drawer .scroll{overflow:auto;flex:1}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint);font-weight:500;text-align:left;padding:10px 20px;background:var(--panel);position:sticky;top:0}
+td{padding:11px 20px;border-top:1px solid var(--rule-soft);vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.drawer footer{padding:12px 20px;border-top:1px solid var(--rule);font-size:12px;color:var(--ink-faint);display:flex;gap:10px;align-items:center}
+
+/* principles band */
+.why{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:980px){.why{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.why div{font-size:12.5px;line-height:1.5;color:var(--ink-soft);padding:12px 14px;border-radius:12px;background:var(--panel);border:1px solid var(--rule-soft)}
+.why b{display:block;color:var(--ink);font-size:13px;margin-bottom:2px}
+
+@media (max-width:760px){
+  .app{flex-direction:column}
+  .rail{position:fixed;inset:0 auto 0 0;z-index:60;width:260px;transform:translateX(-100%);transition:transform .18s ease;padding-top:calc(14px + env(safe-area-inset-top,0px));padding-left:calc(10px + env(safe-area-inset-left,0px))}
+  .rail.mob{transform:none}
+  .rail .name,.rail .lbl,.rail .who{display:block!important}
+  .rail .brand{flex-direction:row!important}
+  .mobilebar{display:flex;align-items:center;gap:10px;height:54px;background:var(--rail);color:#fff;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));flex-shrink:0}
+  .mobilebar button{width:40px;height:40px;display:grid;place-items:center;border-radius:9px}
+  .tiles{gap:10px}.tile .v{font-size:22px}
+}
+.rail.open .nav .badge{position:static;margin-left:auto;height:20px;min-width:22px;font-size:11px}
+.vid{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:6px;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:12px;font-weight:500;white-space:nowrap}
+.lc .tag{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:11px;font-weight:500;color:var(--route-dark);background:var(--route-tint);padding:2px 7px;border-radius:99px}
+.empty{padding:40px 20px;text-align:center;color:var(--ink-soft);font-size:13px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:10px;font-size:13px;z-index:70;box-shadow:var(--shadow)}
+</style>
+
+<div class="app">
+  <nav class="rail" id="rail" aria-label="Modules"></nav>
+  <div class="mobilebar"><button type="button" id="menu" aria-label="Open the menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><b>TransitTechOS</b></div>
+  <main>
+    <div class="wrap">
+      <div class="preview">
+        <span class="eyebrow">Design preview · view as</span>
+        <div class="seg" role="radiogroup" aria-label="Role" id="roles"></div>
+        <span class="note">Example data shaped on Lakeshore Paratransit. The rail matches each role’s real menu; tiles and “More views” cards open side panels, and the tag on a card shows which menu page holds the full view.</span>
+      </div>
+      <div class="head">
+        <div class="t"><div class="eyebrow" id="eyebrow"></div><h1 id="hello"></h1></div>
+        <div id="headActions"></div>
+      </div>
+      <div class="brief" id="brief"></div>
+      <div class="tiles" id="tiles"></div>
+      <div class="focus" id="focus"></div>
+      <section class="more">
+        <h2>More views</h2>
+        <div class="hint" id="moreHint">Everything this role can open. Each one opens in a side panel, so the dashboard stays short.</div>
+        <div class="launch" id="launch"></div>
+      </section>
+      <section>
+        <div class="eyebrow" style="margin-bottom:10px">How every role dashboard is built</div>
+        <div class="why">
+          <div><b>One line first</b>The briefing tells the person what needs them now, with one button to act.</div>
+          <div><b>Four numbers, no more</b>Each tile is clickable and opens its detail, so numbers never sit as dead ends.</div>
+          <div><b>One focus area</b>The work this role does most: decide, fix, tune or analyse. Everything else waits.</div>
+          <div><b>The rest on request</b>“More views” lists every panel the role can open, so nothing is hidden and nothing crowds the screen.</div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+<div class="toast" id="toast" hidden role="status"></div>
+<aside class="drawer" id="drawer" hidden role="dialog" aria-modal="true" aria-labelledby="dTitle"></aside>
+
+<script>
+const I={
+ chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',bell:'<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/>',
+ flow:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v3a4 4 0 0 0 4 4h5.5"/>',
+ wrench:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+ shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',eye:'<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+ list:'<path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/>',flask:'<path d="M9 3h6M10 3v6L4 19a1.5 1.5 0 0 0 1.3 2h13.4A1.5 1.5 0 0 0 20 19l-6-10V3"/>',
+ bus:'<rect x="4" y="3" width="16" height="15" rx="2"/><path d="M4 11h16M7 21v-3M17 21v-3"/>',user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+ msg:'<path d="M4 5h16v11H8l-4 4z"/>',server:'<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+ calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',ask:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01"/>'
+};
+const ico=(k,s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[k]}</svg>`;
+const pill=(t,c)=>`<span class="pill p-${c}">${t}</span>`;
+const vid=t=>`<span class="vid">${t}</span>`;
+const spark=(vals,color="var(--route)")=>{const w=200,h=30,mx=Math.max(...vals),mn=Math.min(...vals),r=mx-mn||1;const pts=vals.map((v,i)=>[i*(w/(vals.length-1)),h-3-((v-mn)/r)*(h-8)]);const d=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");const last=pts[pts.length-1];return `<svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="height:30px" aria-hidden="true"><path d="${d} L${w} ${h} L0 ${h}Z" fill="${color}" opacity=".1"/><path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke"/><circle cx="${last[0]-2}" cy="${last[1]}" r="2.6" fill="${color}"/></svg>`};
+const bar=(pct,c)=>`<div class="bar"><i style="width:${pct}%;background:${c}"></i></div>`;
+
+/* Panels: open in the side panel. `mod` = the rail module that holds the full page (only shown if the role has it). */
+const P={
+ queue:{t:"Decisions waiting",ic:"bell",mod:"Needs your attention",h:"12 approvals · 0 manual",ct:"12",d:"The queue in the order you'll work it: manual actions first, then by severity, then oldest.",
+  cols:["Vehicle","Step","Severity","Waiting"],rows:[[vid("P-216"),"Pull from the schedule · 4/7",pill("High","sig"),"14 h"],[vid("P-212"),"Open work order · 3/7",pill("High","sig"),"14 h"],[vid("P-201"),"Open work order · 3/7",pill("High","sig"),"13 h"],[vid("P-210"),"Open work order · 3/7",pill("High","sig"),"9 h"],[vid("P-208"),"Pull from the schedule · 4/7",pill("High","sig"),"2 h"],[vid("P-204"),"Pull from the schedule · 4/7",pill("Medium","route"),"2 d"]]},
+ shopq:{t:"Work orders waiting for your approval",ic:"bell",mod:"Needs your attention",h:"7 “Open work order” steps",ct:"7",d:"Open-work-order steps that a shop manager or a dispatcher can approve. The rest of the queue belongs to dispatch.",
+  cols:["Vehicle","Fault","Severity","Waiting"],rows:[[vid("P-212"),"Coolant temperature high",pill("High","sig"),"14 h"],[vid("P-201"),"Brake air pressure low",pill("High","sig"),"13 h"],[vid("P-210"),"Wheelchair lift fault",pill("High","sig"),"9 h"],[vid("P-214"),"Battery voltage low",pill("Medium","route"),"2 d"],[vid("P-206"),"PM overdue",pill("Medium","route"),"14 h"],[vid("P-211"),"Door sensor",pill("Medium","route"),"13 h"]]},
+ runs:{t:"Today's runs and trips",ic:"bus",mod:"Simulate",h:"136 runs · 4 reassigned · 5 running late",ct:"136",d:"Every run on today's schedule with its vehicle, driver and how late it is running.",
+  cols:["Run","Vehicle","Driver","Status","Late"],rows:[["Medical Express 216AM",vid("P-216"),"T. Walsh",pill("Needs cover","stop"),"—"],["Medical Express 216PM",vid("P-216"),"T. Walsh",pill("Needs cover","stop"),"—"],["Dialysis Shuttle 3",vid("P-203"),"A. Gomez",pill("Running late","sig"),"9 min"],["Senior Center Loop",vid("P-219 spare"),"K. Osei",pill("Reassigned","route"),"0 min"],["Medical Express 207AM",vid("P-207"),"L. Chen",pill("On time","go"),"0 min"]]},
+ noshow:{t:"No-show recovery",ic:"user",h:"9 handled · 76 min freed",ct:"9",d:"No-shows and late cancellations the agent turned back into service, last 7 days.",
+  cols:["Trip","What the agent did","Freed","Result"],rows:[["Dialysis Shuttle 3","Booked standby rider (medical)","8 min",pill("Seated","go")],["Medical Express 207AM","Moved 3 later pickups earlier","11 min",pill("2 late avoided","go")],["Senior Center Loop","Record only, no standby fits","8 min",pill("Logged","n")]]},
+ spares:{t:"Spares and drivers available",ic:"user",mod:"Simulate",h:"2 spares · 4 qualified drivers",ct:"2",d:"What the agent can draw on to cover runs. Drivers Vestige marks non-compliant are never proposed.",
+  cols:["Resource","Qualified for","Status"],rows:[[vid("P-219")+" van","Wheelchair",pill("On Senior Center Loop","route")],[vid("P-220")+" van","Wheelchair",pill("Free","go")],["K. Osei","Wheelchair, air brakes",pill("Assigned","route")],["M. Ruiz","Wheelchair",pill("Free","go")],["R. Diaz","—",pill("Medical card expired","stop")]]},
+ riders:{t:"Rider messages",ic:"msg",mod:"Simulate",h:"64 sent in the last 24 hours",ct:"64",d:"Updated ETAs and booking confirmations, in each rider's language and channel.",
+  cols:["Sent","Rider","Channel","Message"],rows:[["05:58","R-1182","SMS · Spanish","Su recogida ahora es a las 07:12"],["05:58","R-0954","App · English","Your pickup is now 7:05 AM"],["05:41","R-2210","SMS · Chinese","您的接送时间改为 06:50"]]},
+ motion:{t:"Orchestrations in motion",ic:"flow",mod:"Orchestrations",h:"14 running · 2 in the shop",ct:"14",d:"Every vehicle incident the agent is working, with the step it is on.",
+  cols:["Vehicle","Step","Status"],rows:[[vid("P-216"),"Pull vehicle · 4/7",pill("Needs approval","sig")],[vid("P-212"),"Open work order · 3/7",pill("Needs approval","sig")],[vid("P-205"),"Return to service · 7/7",pill("In the shop","shop")],[vid("P-209"),"Return to service · 7/7",pill("In the shop","shop")]]},
+ shadow:{t:"Shadow comparisons",ic:"eye",mod:"Shadow mode",h:"88% agreement with people",ct:"88%",d:"In shadow mode the agent only recommends. These are its recommendations next to what people did by hand.",
+  cols:["Vehicle","Step","Agent","People","Match"],rows:[[vid("P-215"),"Pull vehicle","09:02","09:31",pill("Same","go")],[vid("P-215"),"Reassign runs","09:03","09:48",pill("Same","go")],[vid("P-209"),"Open work order","Tue 16:10","Tue 16:22",pill("Different","sig")]]},
+ wo:{t:"Open work orders",ic:"wrench",mod:"Maintenance",h:"6 open · 1 critical",ct:"6",d:"Everything on the bench in FASTER. Closing an agent-opened work order returns the vehicle to the schedule automatically.",
+  cols:["Work order","Vehicle","Priority","Status"],rows:[["WO-3311",vid("P-205"),pill("Critical","stop"),"In progress"],["WO-3309",vid("P-209"),pill("High","sig"),"In progress"],["WO-3314",vid("P-213"),pill("High","sig"),"Waiting"],["WO-3302",vid("P-218"),pill("Low","n"),"Waiting"]]},
+ defects:{t:"Safety defects (Vestige)",ic:"shield",h:"2 open · 1 keeps a van off the road",ct:"2",d:"Defects logged alongside brake and accessibility faults. Closing the work order clears the matching defect.",
+  cols:["Defect","Vehicle","System","Effect"],rows:[["D-118",vid("P-205"),"Brakes",pill("Out of service","stop")],["D-115",vid("P-209"),"Accessibility",pill("No wheelchair runs","sig")]]},
+ pm:{t:"Preventive maintenance due",ic:"calendar",mod:"Maintenance",h:"1 overdue · 3 due this week",ct:"4",d:"Found by the maintenance scanner. Overdue by more than 1,500 miles is treated as high severity.",
+  cols:["Vehicle","Last PM","Miles over","Severity"],rows:[[vid("P-206"),"Aug 30",'<span class="tnum">1,840</span>',pill("High","sig")],[vid("P-211"),"Sep 04",'<span class="tnum">620</span>',pill("Medium","route")],[vid("P-202"),"Sep 11","due Fri",pill("Low","n")]]},
+ compliance:{t:"Driver compliance",ic:"user",h:"2 not compliant",ct:"2",d:"Drivers Vestige marks non-compliant. The agent never proposes them for cover.",
+  cols:["Driver","Issue","Since"],rows:[["R. Diaz","Medical card expired","Oct 12"],["S. Brooks","Wheelchair securement cert lapsed","Oct 02"]]},
+ outofsvc:{t:"Vehicles out of service",ic:"bus",h:"2 of 20",ct:"2",d:"Vehicles blocked in trip management and why.",
+  cols:["Vehicle","Reason","Back by"],rows:[[vid("P-205"),"Brakes · WO-3311 · D-118","Thu 14:00"],[vid("P-209"),"Wheelchair lift · WO-3309","Thu 16:00"]]},
+ bays:{t:"Shop bays by depot",ic:"calendar",mod:"Maintenance",h:"Next 4 days",ct:"",d:"Bays booked against bays available. The agent uses this to pick a shop window.",
+  cols:["Day","Main (3)","East (1)","Total"],rows:[["Thu","3 booked","1 booked","4 / 4"],["Fri","2 booked","0 booked","2 / 4"],["Sat","1 booked","0 booked","1 / 4"],["Sun","0 booked","0 booked","0 / 4"]]},
+ measures:{t:"All six pilot measures",ic:"chart",h:"4 on target · 2 not yet",ct:"4/6",d:"The pilot's success measures against the Phase 0 baseline and the proposal's targets, last 28 days. Baseline isn't set yet.",
+  cols:["Measure","Now","Baseline","Target",""],rows:[["Fault detection to open work order","0 min · 17 WOs","not set","Under 5 min",pill("On target","go")],["Manual re-entry across products","0 / incident","not set","Eliminated",pill("On target","go")],["Affected runs covered before pull-out","100% · 9 of 9","not set","Above baseline",pill("On target","go")],["Decisions with a complete audit record","62%","not set","100%",pill("Not yet","sig")],["Dispatcher acceptance","78% · 27 decisions","—","Tracked weekly",pill("Not yet","sig")],["Vehicle returned after close","100%","manual","Automatic",pill("On target","go")]]},
+ escal:{t:"Manual actions needed",ic:"bell",mod:"Needs your attention",h:"None right now",ct:"0",d:"Steps that failed after retries. The agent undoes what it can and asks a person to finish.",cols:["Vehicle","What failed","Undone","Waiting"],rows:[],empty:"No manual actions are waiting. Failures show here with what the agent already undid."},
+ outages:{t:"Product connections",ic:"server",mod:"Simulate",h:"6 products · all healthy",ct:"6",d:"Adapters to each product, with recent errors and retries. Simulate can force outages for testing.",
+  cols:["Product","System","Calls 24h","Errors"],rows:[["Asset management","FASTER","604","0"],["Trip management","Ecolane","1,881","3 retried"],["Workforce","Bytecurve","342","0"],["Safety & compliance","Vestige","115","0"],["Rider comms","TripShot","64","0"]]},
+ evals:{t:"Model evaluation",ic:"flask",h:"Last run 98% · Oct 13",ct:"98%",d:"The suite to run before any model change.",
+  cols:["Suite","Cases","Passed","Run"],rows:[["Cover-plan explanations","40","40","Oct 13"],["Severity assessment","30","29","Oct 13"],["Rider message wording","25","25","Oct 13"]]},
+ audit:{t:"Audit log",ic:"list",mod:"Audit log",h:"Latest decisions and actions",ct:"",d:"Events, assessments, approvals, actions, failures and compensations, with the data considered and the model used.",
+  cols:["Time","Actor","Record","Outcome"],rows:[["06:10","Agent","Assess · P-208","High, 1 run at risk"],["04:02","Agent (as Shop manager)","Open work order · P-216","WO-3315"],["16:30","Telematics","Fault received · P-216","New"]]},
+ people:{t:"Who may do what",ic:"user",mod:"Autonomy policy",h:"4 personas",ct:"4",d:"The agent never does more than the person it acts for.",
+  cols:["Action","Dispatcher","Shop mgr","Admin"],rows:[["Open work order","Yes","Yes","Yes"],["Pull vehicle","Yes","—","Yes"],["Reassign runs","Yes","—","Yes"],["Close safety defect","—","Yes","Yes"]]},
+ routes:{t:"Late pickups by route",ic:"bus",h:"Medical Express is the worst",ct:"",d:"Last 30 days, ranked by late pickups, with what the model says drives each one.",
+  cols:["Route","On-time","Late","Main driver"],rows:[["Medical Express","86.1%","212","Dwell at clinics"],["Dialysis Shuttle","89.4%","141","Too little recovery time"],["Senior Center Loop","93.0%","58","PM-peak crowding"]]},
+ coach:{t:"Operators to coach first",ic:"user",h:"3 suggested",ct:"3",d:"Operators whose runs are late more often than the model expects for their routes.",
+  cols:["Operator","Runs 30d","Late vs expected","Route"],rows:[["Op 1182","44","+9.2 pts","Medical Express"],["Op 0954","38","+7.5 pts","Dialysis Shuttle"],["Op 2210","41","+6.1 pts","Medical Express"]]},
+ outcomes:{t:"Orchestration outcomes",ic:"flow",mod:"Orchestrations",h:"How cases ended, 28 days",ct:"",d:"How vehicle-health orchestrations ended.",
+  cols:["Outcome","Count"],rows:[["Completed","17"],["Needs approval","12"],["In the shop","2"],["With issues","3"]]},
+ ask:{t:"Ask a question",ic:"ask",h:"Grounded answers from your data",ct:"",d:"Answers come from the agency's own model and history, with the facts used shown under each answer.",
+  cols:["Try asking"],rows:[["How do we move OTP from 92% to 95%?"],["Why are pickups late on Medical Express?"],["Which operators should we coach first?"],["Why was P-216 pulled?"]]},
+};
+
+function runTimeline(){
+  const s0=5,s1=17,runs=[["216AM","stop",6,10.5,"Needs cover · 3 riders"],["216PM","stop",12.75,16.5,"Needs cover · 6 riders"]];
+  const L=64,W=560,x=h=>L+(h-s0)/(s1-s0)*(W-L-10);let s=`<svg class="chart" viewBox="0 0 ${W} 120" role="img" aria-label="P-216's two Medical Express runs today, 06:00 and 12:45, both need cover if the van is pulled">`;
+  [5,8,11,14,17].forEach(h=>{const X=x(h);s+=`<line x1="${X}" x2="${X}" y1="14" y2="96" stroke="var(--rule)"/><text x="${X}" y="114" text-anchor="middle">${String(h).padStart(2,"0")}:00</text>`});
+  runs.forEach((r,i)=>{const y=26+i*34;s+=`<text x="0" y="${y+14}" style="font-family:var(--mono)">${r[0]}</text><rect x="${x(r[2])}" y="${y}" width="${x(r[3])-x(r[2])}" height="22" rx="5" fill="var(--stop)" opacity=".88"/><text x="${x(r[2])+8}" y="${y+15}" style="fill:#fff;font-weight:600">${r[4]}</text>`});
+  const now=x(6.4);s+=`<line x1="${now}" x2="${now}" y1="8" y2="96" stroke="var(--ink)" stroke-dasharray="3 3"/><text x="${now+4}" y="11" style="fill:var(--ink);font-weight:600">now 06:24</text></svg>`;return s;
+}
+function otpChart(){
+  const v=[90.1,90.6,90.2,91.0,91.4,90.9,91.8,92.0,91.7,92.4,92.2,92.4];const W=560,H=200,L=40,B=26,T=14,mn=89,mx=96;
+  const x=i=>L+i*((W-L-12)/(v.length-1)),y=p=>T+(mx-p)/(mx-mn)*(H-T-B);let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Weekly on-time pickups over 12 weeks, from 90.1% to 92.4%, against a 95% target">`;
+  [89,91,93,95].forEach(g=>{s+=`<line x1="${L}" x2="${W-12}" y1="${y(g)}" y2="${y(g)}" stroke="var(--rule-soft)"/><text x="${L-6}" y="${y(g)+4}" text-anchor="end">${g}%</text>`});
+  s+=`<line x1="${L}" x2="${W-12}" y1="${y(95)}" y2="${y(95)}" stroke="var(--go)" stroke-dasharray="5 4"/><text x="${W-14}" y="${y(95)-6}" text-anchor="end" style="fill:var(--go);font-weight:600">Target 95%</text>`;
+  const d=v.map((p,i)=>(i?"L":"M")+x(i).toFixed(1)+" "+y(p).toFixed(1)).join(" ");
+  s+=`<path d="${d} L${x(v.length-1)} ${H-B} L${L} ${H-B}Z" fill="var(--route)" opacity=".1"/><path d="${d}" fill="none" stroke="var(--route)" stroke-width="2"/>`;
+  s+=`<circle cx="${x(v.length-1)}" cy="${y(92.4)}" r="4.5" fill="var(--route)"/><text x="${x(v.length-1)-8}" y="${y(92.4)+18}" text-anchor="end" style="fill:var(--ink);font-weight:600">92.4%</text>`;
+  [[0,"Jul 21"],[3,"Aug 11"],[6,"Sep 01"],[9,"Sep 22"],[11,"Oct 06"]].forEach(([i,t])=>{s+=`<text x="${x(i)}" y="${H-6}" text-anchor="middle">${t}</text>`});return s+"</svg>";
+}
+const accRows=[["Open work order",86,6,1],["Pull vehicle",64,9,5],["Reassign runs",100,6,0]];
+const linkTo=(mod,label)=>`<button type="button" class="link" data-mod="${mod}">${label||"Open "+mod} →</button>`;
+
+const ROLES={
+ dispatcher:{label:"Dispatcher",person:"Ivan Ramos",ini:"IR",eyebrow:"Dispatcher · Lakeshore Paratransit · Thu 15 Oct · 06:24 ET",greet:"Good morning, Ivan",
+  rail:[["chart","Dashboard",1],["bell","Needs your attention",0,12],["flow","Orchestrations"],["wrench","Maintenance"],"|",["eye","Shadow mode"],["list","Audit log"],"|",["flask","Simulate"]],
+  brief:{tone:"var(--signal)",text:"<b>12 decisions are waiting on you.</b> P-216 is waiting to be pulled, and its Medical Express 216AM run starts at 06:00 with 3 riders and no cover yet.",btn:"Open the queue",mod:"Needs your attention"},
+  tiles:[{l:"Decisions waiting",v:"12",s:"0 need manual action",c:"warn",p:"queue"},{l:"Orchestrations in motion",v:"14",s:"2 vans in the shop",p:"motion"},{l:"Vehicles in service",v:"18/20",s:"2 out of service",c:"warn",p:"outofsvc"},{l:"On-time pickups, 30 days",v:"92.4%",s:"+0.8 pts vs prior 30 days",c:"good",sp:[90.1,90.6,91,91.4,91.8,92,92.4]}],
+  focus:()=>`<section class="card"><header><h2>Next decision</h2>${pill("High","sig")}<span class="sub">1 of 12</span></header><div class="body">
+   <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">${vid("P-216")}<span style="font-size:18px;font-weight:600">Pull from the schedule</span></div>
+   <div style="font-size:12.5px;color:var(--ink-soft);margin-top:6px">Step 4 of 7 · requested 14 h ago · for Dispatcher</div>
+   <div class="steps" aria-label="Step 4 of 7"><span class="d"></span><span class="d"></span><span class="d"></span><span class="c"></span><span></span><span></span><span></span></div>
+   <div class="reason"><b>Why the agent proposes this</b>Mark P-216 unavailable Thu 07:00–17:00 so the schedule stops assigning it. 2 runs in that window will need cover; the next step proposes spare P-220 and M. Ruiz.</div>
+   <div class="actions"><button class="btn pri" type="button">Approve</button><button class="btn q" type="button">Change</button><button class="btn no" type="button">Reject</button>${linkTo("Needs your attention","Open in the queue")}</div></div></section>
+   <section class="card"><header><h2>P-216's runs today</h2><span class="sub">what pulling it affects</span></header><div class="body" style="overflow-x:auto">${runTimeline()}</div>
+   <div class="legend"><span><i style="background:var(--route)"></i>Covered</span><span><i style="background:var(--signal)"></i>Awaiting approval</span><span><i style="background:var(--stop)"></i>Needs cover</span></div></section>`,
+  panels:["runs","spares","noshow","riders","motion","shadow","audit"]},
+
+ shop_manager:{label:"Shop manager",person:"Luis Zhang",ini:"LZ",eyebrow:"Shop manager · Lakeshore Paratransit · Main and East depots",greet:"Good morning, Luis",
+  rail:[["chart","Dashboard",1],["bell","Needs your attention",0,7],["flow","Orchestrations"],["wrench","Maintenance"],"|",["list","Audit log"],"|",["flask","Simulate"]],
+  brief:{tone:"var(--stop)",text:"<b>7 work orders are waiting for your approval.</b> Thursday's bays are full (4 of 4), so new critical work goes to Friday.",btn:"Review approvals",mod:"Needs your attention"},
+  tiles:[{l:"Work orders to approve",v:"7",s:"oldest waiting 2 days",c:"warn",p:"shopq"},{l:"Open work orders",v:"6",s:"1 critical · 2 high",c:"bad",p:"wo"},{l:"Open safety defects",v:"2",s:"1 keeps a van off the road",c:"bad",p:"defects"},{l:"Vehicles in service",v:"18/20",s:"2 in the shop",c:"warn",p:"outofsvc"}],
+  focus:()=>{const lane=(t,dot,cards)=>`<div style="min-width:0"><div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:8px"><span style="width:8px;height:8px;border-radius:50%;background:${dot}"></span>${t}<span class="tnum" style="color:var(--ink-faint);font-weight:500">${cards.length}</span></div><div style="display:flex;flex-direction:column;gap:8px">${cards.map(c=>`<div style="border:1px solid var(--rule);border-radius:10px;padding:10px 12px;background:var(--panel)"><div style="display:flex;gap:6px;align-items:center">${vid(c[0])}<span style="margin-left:auto">${c[2]}</span></div><div style="font-size:12.5px;margin-top:6px">${c[1]}</div>${c[3]?`<button class="btn q" type="button" style="height:30px;margin-top:8px;font-size:12px">${c[3]}</button>`:""}</div>`).join("")}</div></div>`;
+   return `<section class="card"><header><h2>Shop board</h2><span class="sub">FASTER</span>${linkTo("Maintenance")}</header><div class="body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px">
+   ${lane("Waiting for the shop","var(--signal)",[["P-213","Coolant leak · WO-3314",pill("High","sig"),"Start work"],["P-218","Mirror bracket · WO-3302",pill("Low","n"),"Start work"]])}
+   ${lane("In progress","var(--shop)",[["P-205","Brakes · WO-3311",pill("Critical","stop"),"Close work order"],["P-209","Wheelchair lift · WO-3309",pill("High","sig"),"Close work order"]])}
+   ${lane("Closed today","var(--go)",[["P-203","Door sensor · WO-3297",pill("Back in service","go")]])}</div></section>
+   <section class="card"><header><h2>Shop bays, next 4 days</h2><button class="link" type="button" data-p="bays">By depot →</button></header><div class="rows">
+   ${[["Thu","4 of 4 booked",100,"var(--stop)"],["Fri","2 of 4 booked",50,"var(--route)"],["Sat","1 of 4 booked",25,"var(--route)"],["Sun","none booked",0,"var(--route)"]].map(r=>`<div class="row" style="grid-template-columns:44px minmax(0,1fr) 110px"><b>${r[0]}</b>${bar(Math.max(r[2],2),r[3])}<span class="tnum" style="font-size:12px;color:var(--ink-soft);text-align:right">${r[1]}</span></div>`).join("")}</div>
+   <div class="body" style="border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink-soft)">Closing an agent-opened work order returns the vehicle to the schedule by itself.</div></section>`},
+  panels:["pm","defects","compliance","bays","outofsvc","motion","audit"]},
+
+ admin:{label:"Operations admin",person:"Tom Haddad",ini:"TH",eyebrow:"Operations admin · Lakeshore Paratransit · vehicle-health pilot",greet:"Pilot governance",period:true,
+  rail:[["chart","Dashboard",1],["bell","Needs your attention",0,12],["flow","Orchestrations"],["wrench","Maintenance"],"|",["shield","Autonomy policy"],["eye","Shadow mode"],["list","Audit log"],"|",["flask","Simulate"]],
+  brief:{tone:"var(--signal)",text:"<b>Running live, 4 of 6 measures on target.</b> Audit records are complete for 62% of orchestrations, below the 100% target. No step is ready for “Agent acts” yet, and the Phase 0 baseline isn't set.",btn:"Set the baseline",mod:"Shadow mode"},
+  tiles:[{l:"Measures on target",v:"4 of 6",s:"baseline not set yet",c:"warn",p:"measures"},{l:"Complete audit records",v:"62%",s:"target 100%",c:"warn",sp:[40,44,51,55,58,60,62],col:"var(--signal)",p:"audit"},{l:"Dispatcher acceptance",v:"78%",s:"approved unchanged · 27 decisions",c:"warn",sp:[70,74,72,77,76,79,78],col:"var(--signal)",p:"measures"},{l:"Decisions waiting",v:"12",s:"0 manual actions",p:"escal"}],
+  focus:()=>`<section class="card"><header><h2>Autonomy readiness by step</h2><span class="sub">28 days</span>${linkTo("Autonomy policy","Policy")}</header><div class="rows">
+   ${accRows.map(r=>`<div class="row" style="grid-template-columns:minmax(110px,1fr) minmax(70px,1.2fr) 46px auto"><div><div class="m">${r[0]}</div><div class="d">${r[2]} approved · ${r[3]} rejected</div></div>${bar(r[1],r[1]>=90?"var(--route)":"var(--signal)")}<b class="tnum" style="text-align:right">${r[1]}%</b>${pill("Keep approving","sig")}</div>`).join("")}</div>
+   <div class="body" style="border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink-soft)">Reassign runs is at 100% but on only 6 decisions. A step becomes “Ready” after 4 steady weeks above 90%.</div></section>
+   <section class="card"><header><h2>System health</h2>${pill("Live","go")}</header><div class="rows">
+   ${[["Run mode","Live · shadow off",pill("Live","go")],["Event backbone","Faults and no-shows arriving, duplicates dropped",pill("Healthy","go")],["Product connections","6 of 6 · 3 retries on Ecolane",pill("Healthy","go")],["Audit records","38% of orchestrations missing a full record",pill("Check","sig")],["Model","Evals 98% on Oct 13",pill("Passing","go")]].map(r=>`<div class="row"><div><div class="m">${r[0]}</div><div class="d">${r[1]}</div></div>${r[2]}</div>`).join("")}</div></section>`,
+  panels:["measures","escal","shadow","people","outages","evals","audit"]},
+
+ viewer:{label:"Analyst",person:"Zane Tanaka",ini:"ZT",eyebrow:"Analyst · read-only · Lakeshore Paratransit",greet:"Service performance",ro:true,period:true,
+  rail:[["chart","Dashboard",1],["flow","Orchestrations"],"|",["list","Audit log"]],
+  brief:{tone:"var(--route)",text:"<b>On-time pickups are 92.4%.</b> The model says 95% is reachable with three changes, led by cutting dwell time at clinics on Medical Express.",btn:"See the path",p:"routes"},
+  tiles:[{l:"On-time pickups, 30 days",v:"92.4%",s:"+0.8 pts vs prior 30 days",c:"good",sp:[90.1,90.6,91,91.4,91.8,92,92.4]},{l:"Late pickups",v:"411",s:"of 5,410 · 30 days",p:"routes"},{l:"No-shows",v:"3.1%",s:"21 seats recovered by the agent",p:"noshow"},{l:"Pilot measures on target",v:"4 of 6",s:"read-only view",p:"measures"}],
+  focus:()=>`<section class="card"><header><h2>On-time pickups, weekly</h2><span class="sub">last 12 weeks</span></header><div class="body" style="overflow-x:auto">${otpChart()}</div></section>
+   <section class="card"><header><h2>Path to 95%</h2><span class="sub">scored by the agency model</span></header><div class="rows">
+   ${[["Cut dwell at clinics on Medical Express","+1.3 pts",93.7],["Keep vans on PM schedule","+0.8 pts",94.5],["Experienced operators on Dialysis Shuttle","+0.6 pts",95.1]].map((r,i)=>`<div class="row" style="grid-template-columns:22px minmax(0,1fr) auto"><span class="mono" style="color:var(--ink-faint)">${i+1}</span><div><div class="m">${r[0]}</div><div class="d">reaches ${r[2]}%</div></div><b class="good tnum">${r[1]}</b></div>`).join("")}</div>
+   <div class="body" style="border-top:1px solid var(--rule)">${bar(100*(95.1-89)/(96-89),"var(--go)")}<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-faint);margin-top:6px"><span>today 92.4%</span><span class="good" style="font-weight:600">95.1% with all three</span></div></div></section>`,
+  panels:["routes","coach","noshow","outcomes","measures","ask","audit"]}
+};
+
+/* ---------- render ---------- */
+const $=id=>document.getElementById(id);
+let role="dispatcher",railOpen=true,lastFocus=null,activeMod="Dashboard";
+try{const o=localStorage.getItem("tto_rail");if(o!==null)railOpen=o==="1";const r=localStorage.getItem("tto_role");if(r&&ROLES[r])role=r}catch(e){}
+const hasMod=m=>ROLES[role].rail.some(it=>it!=="|"&&it[1]===m);
+function renderRail(){
+  const R=ROLES[role];const rail=$("rail");rail.classList.toggle("open",railOpen);
+  let h=`<div class="brand"><span class="logo"><svg width="18" height="18" viewBox="0 0 32 32"><circle cx="9" cy="16" r="3.5" fill="#fff"/><circle cx="23" cy="16" r="3.5" fill="#fff"/><rect x="9" y="14.5" width="14" height="3" fill="#fff"/></svg></span><span class="name">TransitTechOS</span><button class="tog" type="button" id="tog" aria-label="${railOpen?"Collapse":"Expand"} the module rail" aria-expanded="${railOpen}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button></div>`;
+  R.rail.forEach(it=>{if(it==="|"){h+=`<div class="sep"></div>`;return}h+=`<button type="button" class="nav ${it[1]===activeMod?"on":""}" title="${it[1]}" data-nav="${it[1]}">${ico(it[0])}<span class="lbl">${it[1]}</span>${it[3]?`<span class="badge tnum" aria-label="${it[3]} waiting">${it[3]}</span>`:""}</button>`});
+  h+=`<div class="me"><span class="av">${R.ini}</span><span class="who"><b>${R.person}</b>${R.label}</span></div>`;rail.innerHTML=h;
+  $("tog").onclick=()=>{if(rail.classList.contains("mob")){rail.classList.remove("mob");return}railOpen=!railOpen;try{localStorage.setItem("tto_rail",railOpen?"1":"0")}catch(e){}renderRail()};
+}
+function flashMod(m){activeMod=m;renderRail();toast(`In the app this opens ${m}.`);setTimeout(()=>{activeMod="Dashboard";renderRail()},1600)}
+function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,1800)}
+function render(){
+  const R=ROLES[role];activeMod="Dashboard";
+  $("roles").innerHTML=Object.entries(ROLES).map(([k,v])=>`<button type="button" role="radio" aria-checked="${k===role}" data-r="${k}">${v.label}</button>`).join("");
+  $("eyebrow").textContent=R.eyebrow;$("hello").innerHTML=R.greet+(R.ro?`<span class="ro">Read-only</span>`:"");
+  $("headActions").innerHTML=R.period?`<div class="seg" role="tablist" aria-label="Period"><button type="button" role="tab" aria-selected="false">7 days</button><button type="button" role="tab" aria-selected="true">28 days</button><button type="button" role="tab" aria-selected="false">Pilot to date</button></div>`:"";
+  const b=R.brief;$("brief").innerHTML=`<span class="dot" style="background:${b.tone}"></span><p>${b.text}</p><button class="btn ${R.ro?"q":"pri"}" type="button" ${b.p?`data-p="${b.p}"`:`data-mod="${b.mod}"`}>${b.btn} →</button>`;
+  $("tiles").innerHTML=R.tiles.map(t=>{const inner=`<span class="l">${t.l}</span><span class="v tnum ${t.c||""}">${t.v}</span><span class="s">${t.s}</span>${t.sp?spark(t.sp,t.col):""}`;return t.p?`<button type="button" class="tile" data-p="${t.p}" aria-label="${t.l}: ${t.v}. Open details">${inner}</button>`:`<div class="tile">${inner}</div>`}).join("");
+  $("focus").innerHTML=R.focus();
+  if(R.ro)$("focus").querySelectorAll(".actions,.btn.pri").forEach(e=>e.remove());
+  $("launch").innerHTML=R.panels.map(k=>{const p=P[k];const m=p.mod&&hasMod(p.mod)?`<span class="tag">${ico(R.rail.find(it=>it!=="|"&&it[1]===p.mod)[0],12)}${p.mod}</span>`:"";return `<button type="button" class="lc" data-p="${k}"><span class="ic">${ico(p.ic)}</span><span style="min-width:0;flex:1"><span class="tt" style="display:block">${p.t}</span><span class="hh" style="display:block">${p.h}</span>${m}</span>${p.ct?`<span class="ct tnum">${p.ct}</span>`:""}</button>`}).join("");
+  renderRail();
+}
+function openPanel(k,src){
+  const p=P[k];if(!p)return;lastFocus=src||document.activeElement;const R=ROLES[role],ro=R.ro;const full=p.mod&&hasMod(p.mod);
+  const body=p.rows.length?`<table><thead><tr>${p.cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>${p.rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`:`<div class="empty">${p.empty}</div>`;
+  const d=$("drawer");d.innerHTML=`<header><div style="min-width:0"><div class="eyebrow">${R.label}${ro?" · read-only":""}</div><h2 id="dTitle">${p.t}</h2><p>${p.d}</p></div><button class="x" type="button" id="dx" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
+  <div class="scroll">${body}</div>
+  <footer><span style="flex:1">Example rows · Esc closes${ro?" · view only":""}</span>${full?`<button type="button" class="link" data-mod="${p.mod}">Open ${p.mod} →</button>`:""}</footer>`;
+  d.hidden=false;$("scrim").hidden=false;$("dx").focus();$("dx").onclick=closePanel;
+}
+function closePanel(){$("drawer").hidden=true;$("scrim").hidden=true;if(lastFocus&&lastFocus.focus)lastFocus.focus()}
+document.addEventListener("click",e=>{const r=e.target.closest("[data-r]");if(r){role=r.dataset.r;try{localStorage.setItem("tto_role",role)}catch(x){}render();return}
+  const m=e.target.closest("[data-mod]");if(m){if(!$("drawer").hidden)closePanel();flashMod(m.dataset.mod);return}
+  const n=e.target.closest("[data-nav]");if(n){if(n.dataset.nav!=="Dashboard")flashMod(n.dataset.nav);$("rail").classList.remove("mob");return}
+  const p=e.target.closest("[data-p]");if(p){openPanel(p.dataset.p,p);return}
+  const tab=e.target.closest('[role="tab"]');if(tab){tab.parentElement.querySelectorAll('[role="tab"]').forEach(b=>b.setAttribute("aria-selected",b===tab))}});
+$("scrim").onclick=closePanel;
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){if(!$("drawer").hidden)closePanel();$("rail").classList.remove("mob")}});
+$("menu").onclick=()=>$("rail").classList.add("mob");
+render();
+</script>

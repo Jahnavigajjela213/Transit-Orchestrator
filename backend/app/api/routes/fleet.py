@@ -33,7 +33,8 @@ async def build_fleet(tid: str, s: AsyncSession) -> list[dict]:
 
     defects: dict[str, list] = {}
     for d in (await s.execute(select(SafetyDefect).where(SafetyDefect.tenant_id == tid, SafetyDefect.status == "open"))).scalars():
-        defects.setdefault(d.vehicle_ref, []).append({"id": d.id, "category": d.category, "severity": d.severity, "out_of_service": d.out_of_service})
+        defects.setdefault(d.vehicle_ref, []).append({"id": d.id, "category": d.category, "severity": d.severity, "out_of_service": d.out_of_service,
+                                                       "description": d.description, "created_at": d.created_at})
     assets = {a.asset_number: a for a in (await s.execute(select(Asset).where(Asset.tenant_id == tid))).scalars()}
     fvs = {v.vehicle_code: v for v in (await s.execute(select(FleetVehicle).where(FleetVehicle.tenant_id == tid))).scalars()}
     readings = await latest_readings(s, tid)

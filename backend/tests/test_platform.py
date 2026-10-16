@@ -46,6 +46,16 @@ async def test_metrics_and_exports(client, dispatcher):
     assert r.status_code == 200
 
 
+async def test_metrics_system_is_admin_only(client, dispatcher, admin):
+    r = await client.get("/api/metrics/system", headers=dispatcher)
+    assert r.status_code == 403
+    r = await client.get("/api/metrics/system", headers=admin)
+    assert r.status_code == 200
+    body = r.json()
+    assert "adapters" in body and isinstance(body["adapters"], dict)
+    assert body["llm_provider"]
+
+
 async def test_product_apis(client, dispatcher):
     for path in ("/products/asset-mgmt/assets", "/products/asset-mgmt/work-orders", "/products/trip-mgmt/vehicles",
                  "/products/trip-mgmt/runs", "/products/workforce/employees", "/products/rider-comms/notifications",

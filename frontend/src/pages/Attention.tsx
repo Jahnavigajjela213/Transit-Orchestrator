@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ChevronLeft, ChevronRight, Sparkles, X } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData, useLive } from "../lib/live";
+import { useAttentionQueue } from "../lib/queue";
 import { ago, clockET, roleName, sentence, words } from "../lib/format";
-import type { Approval, Step, Workflow, WorkflowDetail } from "../lib/types";
+import type { Approval, Step, WorkflowDetail } from "../lib/types";
 import { initialOverride, StepBody, UncoveredRuns } from "../components/DecisionCard";
 import { loadCatalogue, type AgentsResponse } from "../components/AgentFlow";
 import { useToast } from "../components/Toast";
@@ -29,14 +30,19 @@ export default function Attention() {
   const { user } = useAuth();
   const { connected } = useLive();
   const toast = useToast();
-  const { data, error, reload } = useData<Approval[]>("/api/approvals?status=pending&limit=60");
-  const { data: wfs } = useData<Workflow[]>("/api/workflows?workflow_type=vehicle_health&limit=200");
+  // Same hook the rail's badge count reads, so the number on the bell always equals what this queue shows.
+  const { data, error, reload, byId, all, escalations } = useAttentionQueue();
   const [cat, setCat] = useState<AgentsResponse | null>(null);
   useEffect(() => { loadCatalogue().then(setCat).catch(() => {}); }, []);
 
   const [queueOpen, setQueueOpen] = useState(() => typeof window === "undefined" || window.innerWidth >= 1024);
   const narrow = () => typeof window !== "undefined" && window.innerWidth < 768;
-  const [kind, setKind] = useState<Kind>("all");
+  const [params] = useSearchParams();
+  // A dashboard KPI can land here pre-filtered, e.g. /attention?kind=escalation.
+  const [kind, setKind] = useState<Kind>(() => {
+    const k = params.get("kind");
+    return k === "escalation" || k === "approval" ? k : "all";
+  });
   const [picked, setPicked] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<DrawerKey | null>(null);
   const [drawerStep, setDrawerStep] = useState<string | null>(null);
@@ -50,16 +56,7 @@ export default function Attention() {
   const [clock, setClock] = useState(clockET());
   useEffect(() => { const id = window.setInterval(() => setClock(clockET()), 15000); return () => window.clearInterval(id); }, []);
 
-  const byId = useMemo(() => Object.fromEntries((wfs || []).map((w) => [w.id, w])), [wfs]);
-  // Only vehicle-health orchestrations; manual actions first, then by severity, then oldest.
-  const all = useMemo(() => {
-    const rank: Record<string, number> = { escalation: 0, approval: 1, informational: 2 };
-    const sev: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-    return (data || []).filter((a) => a.status === "pending" && (!wfs || byId[a.workflow_id]))
-      .sort((a, b) => (rank[a.kind] - rank[b.kind]) || ((sev[a.severity ?? "low"] ?? 4) - (sev[b.severity ?? "low"] ?? 4)) || a.requested_at.localeCompare(b.requested_at));
-  }, [data, wfs, byId]);
   const queue = all.filter((a) => kind === "all" || a.kind === kind || (kind === "approval" && a.kind === "informational"));
-  const escalations = all.filter((a) => a.kind === "escalation").length;
   const current = queue.find((a) => a.id === picked) ?? queue[0] ?? null;
   const wf = current ? byId[current.workflow_id] : null;
   const steps: Step[] = wf?.steps ?? [];

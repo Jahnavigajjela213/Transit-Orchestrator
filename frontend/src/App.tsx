@@ -7,14 +7,16 @@ import Layout from "./components/Layout";
 import { Loading } from "./components/ui";
 import Login from "./pages/Login";
 import Attention from "./pages/Attention";
+import Measures from "./pages/Measures";
 import Workflows from "./pages/Workflows";
 import WorkflowDetail from "./pages/WorkflowDetail";
 import WorkOrders from "./pages/WorkOrders";
 import Audit from "./pages/Audit";
 import Policies from "./pages/Policies";
 import Shadow from "./pages/Shadow";
+import Evals from "./pages/Evals";
 import Simulate from "./pages/Simulate";
-import Measures from "./pages/Measures";
+import DashboardIndex from "./pages/dashboard";
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -31,7 +33,7 @@ function ToSimulate({ tab }: { tab: string }) {
   return <Navigate to={`/simulate?${q}`} replace />;
 }
 
-// The demo is scoped to the vehicle-health orchestration. Overview, Fleet, Safety, Performance, Assistant, Evals, Events
+// The demo is scoped to the vehicle-health orchestration. Overview, Fleet, Safety, Performance, Assistant, Events
 // and the old Simulator pages are kept in src/pages but not routed. Raising faults and the scheduling and rider data live
 // in the Simulate playground.
 export default function App() {
@@ -42,8 +44,8 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route element={<Protected><Layout /></Protected>}>
-              <Route index element={<Attention />} />
-              <Route path="attention" element={<Navigate to="/" replace />} />
+              <Route index element={<DashboardIndex />} />
+              <Route path="attention" element={<Attention />} />
               <Route path="workflows" element={<Workflows />} />
               <Route path="workflows/:id" element={<WorkflowDetail />} />
               <Route path="work-orders" element={<WorkOrders />} />
@@ -53,6 +55,7 @@ export default function App() {
               <Route path="simulator" element={<ToSimulate tab="fault" />} />
               <Route path="policies" element={<Policies />} />
               <Route path="shadow" element={<Shadow />} />
+              <Route path="evals" element={<Evals />} />
               <Route path="measures" element={<Measures />} />
               <Route path="audit" element={<Audit />} />
               <Route path="*" element={<Navigate to="/" replace />} />

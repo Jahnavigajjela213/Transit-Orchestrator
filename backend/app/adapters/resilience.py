@@ -38,11 +38,25 @@ class TokenBucket:
 
 _buckets: dict[str, TokenBucket] = {}
 
+# Per-adapter counters for this process's lifetime, so the Operations admin dashboard can show "is each connected
+# product actually reachable right now" without adding a dependency on a metrics backend. Reset on restart, like
+# the rate-limit buckets above; that is fine, since the question it answers is always "since this run started."
+_stats: dict[str, dict[str, int]] = {}
+
 
 def _bucket(system: str) -> TokenBucket:
     if system not in _buckets:
         _buckets[system] = TokenBucket(settings.adapter_rate_limit_per_second)
     return _buckets[system]
+
+
+def _stat(system: str) -> dict[str, int]:
+    return _stats.setdefault(system, {"calls": 0, "errors": 0, "retries": 0})
+
+
+def adapter_stats() -> dict[str, dict[str, int]]:
+    """A snapshot of calls/errors/retries per connected product, for the system-health panel."""
+    return {k: dict(v) for k, v in _stats.items()}
 
 
 async def protected_write(
@@ -59,6 +73,8 @@ async def protected_write(
             log.info("idempotent replay %s (%s)", full_action, idempotency_key)
             return prior.result
 
+    stat = _stat(system)
+    stat["calls"] += 1
     attempt = 0
     while True:
         attempt += 1
@@ -68,7 +84,9 @@ async def protected_write(
                 result = await fn()
             break
         except ProductAPIError as e:
+            stat["errors"] += 1
             if e.transient and attempt < settings.adapter_max_retries:
+                stat["retries"] += 1
                 delay = backoff_base * (2 ** (attempt - 1))
                 log.warning("%s transient failure (attempt %d), retrying in %.1fs: %s", full_action, attempt, delay, e.message)
                 await asyncio.sleep(delay)

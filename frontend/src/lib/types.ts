@@ -94,7 +94,7 @@ export interface FleetRow {
   wheelchair_positions: number; depot: string; schedule_status: string; unavailable_until: string | null;
   unavailable_reason: string | null; asset_status: string; make_model: string; odometer: number; pm_miles_over: number;
   open_work_orders: { id: string; title: string; status: string; priority: string }[]; runs_today: number;
-  open_defects?: { id: string; category: string; severity: string; out_of_service: boolean }[];
+  open_defects?: { id: string; category: string; severity: string; out_of_service: boolean; description: string; created_at: string }[];
   telemetry: { ts: string; engine_temp_c: number; oil_pressure_kpa: number; battery_v: number; dtc_codes: string[] } | null;
   active_workflow: { id: string; status: string; current_step: string } | null;
 }

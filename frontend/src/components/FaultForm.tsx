@@ -40,7 +40,7 @@ export default function FaultForm() {
     try {
       await api.post("/api/simulator/fault", { vehicle_label: vehicle, fault_code: code });
       toast(`${vehicle} reported ${code}. The agent's decision for you is on Needs your attention.`);
-      nav("/");
+      nav("/attention");
     } catch (e: any) { toast(e.message, "error"); } finally { setBusy(false); }
   }
 
