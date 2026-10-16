@@ -52,10 +52,22 @@ async def test_invalid_policy_rejected(client, admin):
     assert r.status_code == 400
 
 
-async def test_tenant_specific_policy(client):
-    """Lakeshore's policy lets the agent open work orders on its own for critical faults."""
-    lsp = await login(client, "dispatcher@lsp.demo")
-    await inject(client, lsp, "P-210", "BRK-02")
-    wf = await workflow_for(client, lsp, "P-210")
-    assert {s["key"]: s["status"] for s in wf["steps"]}["open_work_order"] == "done"
-    assert pending(wf)["step"] == "pull_vehicle"
+async def test_tenant_specific_policy(client, dispatcher):
+    """Policy is per tenant: Lakeshore lets the agent open work orders on its own for critical faults; Metro Valley,
+    with the same fault, still asks a person. (Both agencies start from the same policy in the seed.)"""
+    lsp_admin = await login(client, "admin@lsp.demo")
+    pol = (await client.get("/api/policies/vehicle_health", headers=lsp_admin)).json()
+    rules = copy.deepcopy(pol["rules"])
+    rules["steps"]["open_work_order"]["by_severity"] = {**rules["steps"]["open_work_order"].get("by_severity", {}), "critical": "autonomous"}
+    assert (await client.put("/api/policies/vehicle_health", json={"rules": rules}, headers=lsp_admin)).status_code == 200
+    try:
+        lsp = await login(client, "dispatcher@lsp.demo")
+        await inject(client, lsp, "P-210", "BRK-02")
+        wf = await workflow_for(client, lsp, "P-210")
+        assert {s["key"]: s["status"] for s in wf["steps"]}["open_work_order"] == "done"
+        assert pending(wf)["step"] == "pull_vehicle"
+        await inject(client, dispatcher, "V-110", "BRK-02")
+        mvt = await workflow_for(client, dispatcher, "V-110")
+        assert pending(mvt)["step"] == "open_work_order"  # Metro Valley's policy is untouched
+    finally:
+        await client.put("/api/policies/vehicle_health", json={"rules": pol["rules"]}, headers=lsp_admin)

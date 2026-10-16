@@ -96,7 +96,7 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
                     {r.reassigned && (
                       <div className="mt-0.5 text-2xs text-ink-soft">
                         was <span className="line-through">{r.original_vehicle_label}</span>
-                        {r.workflow_id && <> by <Link to={`/workflows/${r.workflow_id}`} className="text-route hover:underline">orchestration</Link></>}
+                        {r.workflow_id && <> by <Link to={`/workflows/${r.workflow_id}`} className="text-route hover:underline">incident</Link></>}
                       </div>
                     )}
                   </td>

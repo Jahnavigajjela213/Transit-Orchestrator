@@ -4,6 +4,7 @@ import { sentence } from "../lib/format";
 
 const tone: Record<string, string> = {
   teal: "bg-route-tint text-route-dark",
+  blue: "bg-shop-tint text-[#22578F]",
   amber: "bg-signal-tint text-[#8A5900]",
   red: "bg-stop-tint text-stop",
   green: "bg-go-tint text-go",
@@ -19,11 +20,11 @@ export function Tag({ children, color = "grey", title }: { children: ReactNode; 
 }
 
 const statusColor: Record<string, keyof typeof tone> = {
-  running: "teal", awaiting_approval: "amber", awaiting_event: "teal", completed: "green", completed_with_issues: "amber",
+  running: "teal", awaiting_approval: "amber", awaiting_event: "blue", completed: "green", completed_with_issues: "amber",
   rejected: "grey", compensated: "red", failed: "red", informational: "grey",
   pending: "amber", approved: "green", overridden: "teal", acknowledged: "grey", cancelled: "grey",
   processed: "green", received: "teal", duplicate: "grey", ignored: "grey",
-  open: "amber", in_progress: "teal", closed: "green", scheduled: "grey",
+  open: "amber", in_progress: "blue", closed: "green", scheduled: "grey",
   available: "green", unavailable: "red", out_of_service: "red", sent: "green",
   shadow: "teal", stale: "grey", matched: "green", differed: "amber", no_action: "grey", passed: "green", error: "red",
   compliant: "green", suspended: "red", not_compliant: "red", restricted: "amber",
@@ -44,7 +45,7 @@ export function SeverityTag({ severity }: { severity: string | null }) {
   return <Tag color={sevColor[severity] ?? "grey"}>{sentence(severity)}</Tag>;
 }
 
-const levelText: Record<string, string> = { autonomous: "Agent acts", semi_autonomous: "Needs approval", informational: "Recommend only", shadow: "Shadow" };
+const levelText: Record<string, string> = { autonomous: "Autonomous", semi_autonomous: "Semi-autonomous", informational: "Informational", shadow: "Shadow" };
 export function LevelTag({ level }: { level: string | null | undefined }) {
   if (!level) return null;
   return <Tag color={level === "autonomous" ? "teal" : level === "semi_autonomous" ? "amber" : "grey"}>{levelText[level] ?? level}</Tag>;
@@ -53,7 +54,7 @@ export function LevelTag({ level }: { level: string | null | undefined }) {
 export function VehicleId({ label, size = "md" }: { label: string | null; size?: "md" | "lg" }) {
   if (!label) return null;
   return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-md bg-ink font-semibold tracking-wide text-white tnum ${size === "lg" ? "px-2.5 py-1 text-base" : "px-1.5 py-0.5 text-[11px]"}`}>
+    <span className={`inline-flex items-center whitespace-nowrap bg-ink font-mono font-semibold text-white ${size === "lg" ? "rounded-lg px-3 py-1 text-lg" : "rounded-[5px] px-1.5 py-0.5 text-xs"}`}>
       {label}
     </span>
   );
@@ -63,12 +64,12 @@ export function PageHeader({ title, intro, actions, eyebrow, badge }: { title: s
   return (
     <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="max-w-3xl">
-        {eyebrow && <div className="mb-1 text-xs font-medium text-ink-faint">{eyebrow}</div>}
+        {eyebrow && <div className="mb-1 text-[13px] font-medium text-ink-faint">{eyebrow}</div>}
         <div className="flex flex-wrap items-center gap-2.5">
-          <h1 className="text-2xl font-semibold leading-tight">{title}</h1>
+          <h1 className="text-[28px] font-semibold leading-tight">{title}</h1>
           {badge}
         </div>
-        {intro && <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{intro}</p>}
+        {intro && <p className="mt-1 leading-relaxed text-ink-faint">{intro}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>
@@ -79,9 +80,9 @@ export function Section({ title, aside, children, className = "", subtitle }: { 
   return (
     <section className={`panel ${className}`}>
       {title && (
-        <div className="flex items-center justify-between gap-3 border-b border-rule px-5 py-3.5">
+        <div className="flex items-center justify-between gap-3 border-b border-rule px-5 py-4">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold">{title}</h2>
+            <h2 className="text-[15px] font-semibold">{title}</h2>
             {subtitle && <p className="mt-0.5 text-xs text-ink-soft">{subtitle}</p>}
           </div>
           {aside}
@@ -119,7 +120,7 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 
 export function KeyVal({ items, dense = false }: { items: [string, ReactNode][]; dense?: boolean }) {
   return (
-    <dl className={`grid grid-cols-[max-content_1fr] ${dense ? "gap-x-5 gap-y-1.5 text-[13px]" : "gap-x-6 gap-y-2.5 text-sm"}`}>
+    <dl className={`grid grid-cols-[max-content_1fr] ${dense ? "gap-x-6 gap-y-2 text-sm" : "gap-x-10 gap-y-3 text-[15px]"}`}>
       {items.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="text-ink-soft">{k}</dt>
@@ -132,6 +133,6 @@ export function KeyVal({ items, dense = false }: { items: [string, ReactNode][];
 
 export function Json({ value }: { value: unknown }) {
   return (
-    <pre className="max-h-72 overflow-auto rounded-sm bg-paper p-3 text-xs leading-relaxed text-ink-soft">{JSON.stringify(value, null, 2)}</pre>
+    <pre className="max-h-96 overflow-auto rounded-[10px] border border-rule bg-[#FAFBFB] p-3.5 font-mono text-xs leading-relaxed text-ink-soft">{JSON.stringify(value, null, 2)}</pre>
   );
 }

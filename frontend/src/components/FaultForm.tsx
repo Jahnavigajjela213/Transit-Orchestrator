@@ -45,6 +45,16 @@ export default function FaultForm() {
     } catch (e: any) { toast(e.message, "error"); } finally { setBusy(false); }
   }
 
+  // the other trigger in step 1 of the pilot: a preventive-maintenance overdue flag from asset management
+  async function pmOverdue() {
+    setBusy(true);
+    try {
+      await api.post("/api/simulator/pm-overdue", { vehicle_label: vehicle, miles_over: 1850 });
+      toast(`${vehicle} flagged PM overdue. The agent's decision for you is on Needs your attention.`);
+      nav("/");
+    } catch (e: any) { toast(e.message, "error"); } finally { setBusy(false); }
+  }
+
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
       <section className="panel">
@@ -101,6 +111,7 @@ export default function FaultForm() {
           <button className="btn-primary w-full justify-center py-2.5" disabled={busy || !canAct || !vehicle || !code} onClick={send}>
             <Zap className="h-4 w-4" aria-hidden /> {busy ? "Sending…" : "Raise fault"}
           </button>
+          <button className="btn-quiet w-full justify-center" disabled={busy || !canAct || !vehicle} onClick={pmOverdue}>Flag PM overdue instead</button>
           <p className="flex items-start gap-2 text-2xs leading-relaxed text-ink-faint">
             <Radio className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
             The agent picks the event up from the event backbone, assesses it and starts the orchestration. You'll be taken to Needs your attention to decide.

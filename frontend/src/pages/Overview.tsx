@@ -149,8 +149,8 @@ export default function Overview() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Overview" intro="How the pilot workflow is performing against the Phase 0 baseline, and what is in motion right now." actions={
-        <Link to="/attention" className="btn-primary">{m.pending_attention} waiting for you</Link>
+      <PageHeader title="Pilot dashboard" intro="Success measures for the pilot against the Phase 0 baseline, dispatcher acceptance, model usage and audit-log delivery, and what is in motion right now." actions={
+        <Link to="/" className="btn-primary">{m.pending_attention} waiting for you</Link>
       } />
 
       <Section title="Operations right now" aside={<span className="text-2xs text-ink-soft">From the products · updated {new Date(m.generated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>}>
@@ -231,7 +231,7 @@ export default function Overview() {
       <div className="grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]">
         <Section title="In motion" aside={<Link to="/workflows" className="text-xs text-route hover:underline">All orchestrations</Link>}>
           {!active ? <Loading /> : active.length === 0 ? (
-            <Empty title="Nothing in motion">Inject a vehicle fault from the <Link className="text-route underline" to="/simulator">simulator</Link> to watch an orchestration run.</Empty>
+            <Empty title="Nothing in motion"><Link className="text-route underline" to="/simulate">Simulate a vehicle fault</Link> to watch an orchestration run.</Empty>
           ) : (
             <ul className="divide-y divide-rule">
               {active.map((w) => (

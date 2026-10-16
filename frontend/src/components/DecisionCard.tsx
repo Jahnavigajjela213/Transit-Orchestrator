@@ -154,7 +154,7 @@ export default function DecisionCard({ item, steps, onDone, inWorkflow = false, 
   );
 }
 
-function initialOverride(item: Approval): Record<string, any> {
+export function initialOverride(item: Approval): Record<string, any> {
   const r = item.recommendation || {};
   if (item.step === "open_work_order") return { priority: r.priority, shop_start: toLocalInput(r.shop_start), shop_end: toLocalInput(r.shop_end) };
   if (item.step === "pull_vehicle") return { from: toLocalInput(r.from), until: toLocalInput(r.until) };
@@ -164,7 +164,7 @@ function initialOverride(item: Approval): Record<string, any> {
   return {};
 }
 
-function StepBody({ item, editing, override, setOverride }: {
+export function StepBody({ item, editing, override, setOverride }: {
   item: Approval; editing: boolean; override: Record<string, any>; setOverride: (o: Record<string, any>) => void;
 }) {
   const r = item.recommendation || {};
@@ -331,7 +331,7 @@ function AdjustBody({ item, editing, override, setOverride }: {
 }
 
 /** Runs the agent could not cover, raised with the dispatcher instead of being skipped. */
-function UncoveredRuns({ runs }: { runs: any[] }) {
+export function UncoveredRuns({ runs }: { runs: any[] }) {
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium leading-relaxed text-stop">No qualified spare vehicle and driver for {runs.length} run(s), {runs.reduce((n, r) => n + r.riders, 0)} booked riders. Please arrange cover by hand: call in an off-duty driver, borrow a vehicle from the other depot, or rebook the riders.</p>

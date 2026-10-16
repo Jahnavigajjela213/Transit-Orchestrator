@@ -1,4 +1,4 @@
-import { AlertTriangle, Bot, Check, Clock, Eye, RotateCcw, UserCheck, X } from "lucide-react";
+import { AlertTriangle, Check, Eye, RotateCcw, X } from "lucide-react";
 import type { Step } from "../lib/types";
 import { time } from "../lib/format";
 
@@ -10,16 +10,16 @@ import { time } from "../lib/format";
 const stationStyle: Record<string, string> = {
   done: "bg-route border-route text-white",
   active: "bg-white border-route text-route",
-  awaiting_approval: "bg-signal border-signal text-white station-live",
-  waiting: "bg-white border-route text-route",
+  awaiting_approval: "bg-white border-signal text-signal station-live",
+  waiting: "bg-white border-shop text-shop shadow-[0_0_0_5px_rgba(47,111,179,0.14)]",
   recommended: "bg-white border-signal text-signal",
   shadowed: "bg-route-tint border-route border-dashed text-route",
   failed: "bg-stop border-stop text-white",
-  escalated: "bg-white border-stop text-stop station-live",
+  escalated: "bg-stop border-stop text-white shadow-[0_0_0_5px_rgba(196,50,31,0.14)]",
   compensated: "bg-white border-stop text-stop",
-  skipped: "bg-white border-rule border-dashed text-ink-faint",
-  not_run: "bg-white border-rule border-dashed text-ink-faint",
-  pending: "bg-white border-rule text-ink-faint",
+  skipped: "bg-white border-[#CDD2D8] border-dashed text-ink-faint",
+  not_run: "bg-white border-[#CDD2D8] border-dashed text-ink-faint",
+  pending: "bg-white border-[#CDD2D8] text-ink-faint",
 };
 
 const statusWord: Record<string, string> = {
@@ -28,12 +28,12 @@ const statusWord: Record<string, string> = {
 };
 
 function Glyph({ status, compact }: { status: string; compact: boolean }) {
-  const cls = compact ? "h-2.5 w-2.5" : "h-3.5 w-3.5";
+  if (compact) return null;
+  const cls = "h-3 w-3";
   if (status === "done") return <Check className={cls} strokeWidth={3} aria-hidden />;
   if (status === "failed") return <X className={cls} strokeWidth={3} aria-hidden />;
   if (status === "escalated") return <AlertTriangle className={cls} strokeWidth={2.5} aria-hidden />;
   if (status === "compensated") return <RotateCcw className={cls} strokeWidth={3} aria-hidden />;
-  if (status === "waiting") return <Clock className={cls} strokeWidth={2.5} aria-hidden />;
   if (status === "shadowed") return <Eye className={cls} strokeWidth={2.5} aria-hidden />;
   return null;
 }
@@ -45,7 +45,8 @@ export default function LineMap({ steps, compact = false, labels = true, medium 
   onStepClick?: (step: Step, el: HTMLElement) => void; agentCount?: Record<string, number>;
 }) {
   const lastReached = steps.reduce((acc, s, i) => (["done", "compensated", "failed", "escalated", "recommended", "shadowed", "active", "awaiting_approval", "waiting"].includes(s.status) ? i : acc), -1);
-  const size = compact ? "h-4 w-4 border-2" : medium ? "h-6 w-6 border-[2.5px]" : "h-7 w-7 border-[3px]";
+  const ring = (st: string) => ["awaiting_approval", "waiting"].includes(st) ? (compact ? "border-[3px]" : medium ? "border-4" : "border-[5px]") : "";
+  const size = compact ? "h-3 w-3 border-2" : medium ? "h-5 w-5 border-2" : "h-[22px] w-[22px] border-2";
   return (
     <ol className="relative flex w-full" aria-label="Workflow progress">
       {steps.map((s, i) => {
@@ -55,19 +56,19 @@ export default function LineMap({ steps, compact = false, labels = true, medium 
             {i < steps.length - 1 && (
               <span
                 aria-hidden
-                className={`absolute left-1/2 w-full ${compact ? "top-[7px] h-[3px]" : medium ? "top-[10px] h-[4px] rounded-full" : "top-[12px] h-[5px]"} ${travelled ? "bg-route" : "bg-rule"}`}
+                className={`absolute left-1/2 w-full ${compact ? "top-[5px] h-[2px]" : medium ? "top-[9px] h-[2px]" : "top-[10px] h-[3px]"} ${travelled ? "bg-route" : "bg-[#E1E4E8]"}`}
               />
             )}
             {onStepClick && agentCount?.[s.key] ? (
               <button type="button" onClick={(e) => onStepClick(s, e.currentTarget)} aria-label={`${s.label}: see the ${agentCount[s.key]} agent(s) on this step`}
-                className={`group/station relative z-10 flex items-center justify-center rounded-full ring-route/30 transition hover:scale-110 hover:ring-4 focus-visible:ring-4 ${size} ${stationStyle[s.status] ?? stationStyle.pending}`}>
+                className={`group/station relative z-10 flex items-center justify-center rounded-full ring-route/30 transition hover:scale-110 hover:ring-4 focus-visible:ring-4 ${size} ${ring(s.status)} ${stationStyle[s.status] ?? stationStyle.pending}`}>
                 <Glyph status={s.status} compact={compact || medium} />
                 <span className="absolute -right-1.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-ink px-0.5 text-[9px] font-bold leading-none text-white ring-2 ring-white" aria-hidden>
                   {agentCount[s.key]}
                 </span>
               </button>
             ) : (
-              <span className={`relative z-10 flex items-center justify-center rounded-full ${size} ${stationStyle[s.status] ?? stationStyle.pending}`}>
+              <span className={`relative z-10 flex items-center justify-center rounded-full ${size} ${ring(s.status)} ${stationStyle[s.status] ?? stationStyle.pending}`}>
                 <Glyph status={s.status} compact={compact || medium} />
               </span>
             )}
@@ -85,11 +86,9 @@ export default function LineMap({ steps, compact = false, labels = true, medium 
               </span>
             )}
             {!compact && !medium && (
-              <span className="mt-2 px-1">
-                <span className={`block font-sign text-xs font-bold leading-tight ${s.status === "awaiting_approval" ? "text-[#8A5900]" : ""}`}>{s.label}</span>
-                <span className="mt-0.5 block text-2xs text-ink-soft">{statusWord[s.status] ?? s.status}{s.at && s.status !== "pending" ? `, ${time(s.at)}` : ""}</span>
-                {s.level && <Who level={s.level} />}
-                {s.detail && <span className="mt-0.5 hidden text-2xs leading-snug text-ink-faint md:block">{s.detail}</span>}
+              <span className="mt-2.5 px-1">
+                <span className={`block text-sm font-medium leading-tight ${s.status === "awaiting_approval" ? "font-semibold text-[#8A5A00]" : s.status === "waiting" ? "font-semibold text-[#22578F]" : s.status === "escalated" || s.status === "failed" ? "font-semibold text-[#A12A1A]" : ["pending", "not_run", "skipped"].includes(s.status) ? "text-ink-faint" : ""}`}>{s.label}</span>
+                <span className="mt-1 block font-mono text-xs text-ink-faint">{s.status === "awaiting_approval" ? "needs approval" : s.status === "waiting" ? "in the shop" : s.status === "escalated" ? "escalated" : s.at && s.status !== "pending" ? time(s.at) : "\u00a0"}</span>
               </span>
             )}
             <span className="sr-only">{s.label}: {statusWord[s.status]}</span>
@@ -97,16 +96,5 @@ export default function LineMap({ steps, compact = false, labels = true, medium 
         );
       })}
     </ol>
-  );
-}
-
-/** Who does this step under the policy: the agent on its own, or a person approving. */
-function Who({ level }: { level: string }) {
-  const agent = level === "autonomous";
-  return (
-    <span className={`mt-1 inline-flex items-center gap-0.5 rounded-full px-1.5 text-[10px] font-semibold ${agent ? "bg-route-tint text-route-dark" : level === "semi_autonomous" ? "bg-signal-tint text-[#8A5900]" : "bg-paper text-ink-soft"}`}>
-      {agent ? <Bot className="h-2.5 w-2.5" aria-hidden /> : <UserCheck className="h-2.5 w-2.5" aria-hidden />}
-      {agent ? "Agent" : level === "semi_autonomous" ? "Person approves" : level === "shadow" ? "Shadow" : "Recommend"}
-    </span>
   );
 }

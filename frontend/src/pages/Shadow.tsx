@@ -6,7 +6,9 @@ import { useData } from "../lib/live";
 import { ago, dayTime, easternNow, sentence, toLocalInput } from "../lib/format";
 import type { ShadowRec } from "../lib/types";
 import { useToast } from "../components/Toast";
-import { Empty, ErrorNote, Json, Loading, PageHeader, Section, SeverityTag, StatusBadge, Tag, VehicleId } from "../components/ui";
+import { Head } from "../components/focus";
+import { GovernanceTabs } from "./Policies";
+import { Empty, ErrorNote, Json, Loading, Section, SeverityTag, StatusBadge, Tag, VehicleId } from "../components/ui";
 
 interface StepSummary {
   step: string; recommended: number; matched: number; differed: number; no_action: number; open: number;
@@ -138,22 +140,23 @@ export default function Shadow() {
   async function measure() {
     try {
       const r = await api.post<{ sample: number; measured: Record<string, number> }>("/api/metrics/baseline/measure");
-      toast(`Baseline measured from ${r.sample} shadow incident(s). See the Overview.`);
+      toast(`Phase 0 baseline measured from ${r.sample} shadow incident(s).`);
     } catch (e: any) { toast(e.message, "error"); }
   }
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Shadow mode"
+      <Head title="Shadow mode"
         intro="Before go-live the agent runs on real events but takes no action. It records what it would have done; people keep working in the products; this screen puts the two side by side."
         actions={<>
           <Link to="/policies" className="btn-quiet">{inShadow ? "Vehicle health is in shadow mode" : "Turn on shadow mode"}</Link>
           {user?.role === "admin" && <button className="btn-primary" onClick={measure}>Measure Phase 0 baseline from shadow runs</button>}
         </>} />
+      <div className="-mt-1"><GovernanceTabs shadow /></div>
 
-      <Section title="Agent compared with people, by step">
+      <Section title="The agent compared with people, by step">
         {!summary ? <Loading /> : summary.steps.length === 0 ? (
-          <Empty title="No shadow runs yet">Set the run mode to Shadow on the <Link to="/policies" className="text-route underline">Autonomy policy</Link> screen, then report a vehicle fault and handle it by hand in the connected systems (Maintenance, Scheduling).</Empty>
+          <Empty title="No shadow runs yet">Set the run mode to Shadow on the <Link to="/policies" className="text-route underline">Autonomy policy</Link> tab, then simulate a vehicle fault and handle it by hand in the connected systems (Maintenance, Scheduling).</Empty>
         ) : (
           <div className="overflow-x-auto">
             <table className="table">
@@ -171,7 +174,7 @@ export default function Shadow() {
             </table>
           </div>
         )}
-        <p className="border-t border-rule px-4 py-2 text-2xs text-ink-soft">"Ready" needs at least 5 compared incidents with 80% or more agreement, and reviewers not preferring the person's choice more often than the agent's. Then move that step from Shadow to Needs approval on the policy screen.</p>
+        <p className="border-t border-rule px-4 py-2 text-2xs text-ink-soft">"Ready" needs at least 5 compared incidents with 80% or more agreement, and reviewers not preferring the person's choice more often than the agent's. Then move that step from Shadow to Semi-autonomous on the Autonomy policy tab.</p>
       </Section>
 
       <div className="flex items-center gap-2">

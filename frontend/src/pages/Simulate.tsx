@@ -8,9 +8,11 @@ import { useToast } from "../components/Toast";
 import { PageHeader, Section } from "../components/ui";
 import Schedule from "./Schedule";
 import Riders from "./Riders";
+import Simulator from "./Simulator";
 
 const TABS = [
   { key: "fault", label: "Raise a fault", icon: Zap },
+  { key: "scenarios", label: "Scenario testing", icon: FlaskConical },
   { key: "scheduling", label: "Scheduling data", icon: CalendarClock },
   { key: "riders", label: "Rider messages", icon: MessageSquare },
   { key: "controls", label: "Demo controls", icon: SlidersHorizontal },
@@ -21,10 +23,9 @@ export default function Simulate() {
   const [params, setParams] = useSearchParams();
   const tab = TABS.find((t) => t.key === params.get("tab"))?.key ?? "fault";
   return (
-    <div className="flex flex-col lg:min-h-0 lg:flex-1">
-      <PageHeader title="Simulate" eyebrow="Testing playground"
-        badge={<span className="inline-flex items-center gap-1 rounded-full border border-signal/40 bg-signal-tint px-2 py-0.5 text-2xs font-semibold text-[#8A5900]"><FlaskConical className="h-3 w-3" aria-hidden />Sandbox</span>}
-        intro="Raise faults and inspect the synthetic scheduling and rider data. Everything here goes through the same event backbone and product APIs a real integration would use." />
+    <div className="flex flex-col">
+      <PageHeader title="Simulate" eyebrow="Testing · sandbox"
+        intro="Scenario testing with fault injection: raise vehicle faults, simulate product outages, and inspect the synthetic scheduling and rider data. Everything goes through the same event backbone and product APIs a real integration uses." />
       <div className="tabs mb-5" role="tablist">
         {TABS.map((t) => (
           <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setParams({ tab: t.key })}>
@@ -33,6 +34,7 @@ export default function Simulate() {
         ))}
       </div>
       {tab === "fault" && <FaultForm />}
+      {tab === "scenarios" && <Simulator embedded />}
       {tab === "scheduling" && <Schedule embedded />}
       {tab === "riders" && <Riders embedded />}
       {tab === "controls" && <DemoControls />}

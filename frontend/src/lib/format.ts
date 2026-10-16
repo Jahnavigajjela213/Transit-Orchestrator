@@ -35,6 +35,6 @@ export const roleName: Record<string, string> = {
 };
 
 const kinds: Record<string, string> = { eta_update: "ETA update", vehicle_change: "Vehicle change", correction: "Correction", booking_confirmed: "Standby booking" };
-export const workflowName: Record<string, string> = { vehicle_health: "Vehicle health", no_show_recovery: "No-show recovery" };
+export const workflowName: Record<string, string> = { vehicle_health: "Vehicle Health to Service Continuity", no_show_recovery: "No-Show Recovery" };
 export const modeName: Record<string, string> = { insert: "Book a standby rider", resequence: "Move later pickups earlier", hold: "Record only, no change" };
 export const kindLabel = (k: string) => kinds[k] ?? sentence(k);

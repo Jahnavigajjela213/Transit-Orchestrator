@@ -1,26 +1,30 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #101828;
-  --color-ink-soft: #475467;
-  --color-ink-faint: #8A94A6;
-  --color-paper: #F5F7FA;
-  --color-rule: #E4E7EC;
+  --color-ink: #0F1720;
+  --color-ink-soft: #4A5560;
+  --color-ink-faint: #6B7580;
+  --color-paper: #F7F8F9;
+  --color-rule: #E6E8EB;
   --color-route: #0B6E69;
-  --color-route-dark: #085550;
-  --color-route-tint: #E3F1EF;
-  --color-signal: #C27D00;
+  --color-route-dark: #084F4B;
+  --color-route-tint: #EEF6F5;
+  --color-signal: #B26B00;
   --color-signal-tint: #FBF0D9;
-  --color-stop: #B8382B;
-  --color-stop-tint: #F8E3E0;
-  --color-go: #2F7D4F;
-  --color-go-tint: #E2F0E7;
-  --color-rail: #0F1C2B;
-  --color-rail-hover: #1B2B3D;
+  --color-stop: #C4321F;
+  --color-stop-tint: #FBE4E0;
+  --color-go: #2F8F5B;
+  --color-go-tint: #E8F4EC;
+  --color-shop: #2F6FB3;
+  --color-shop-tint: #F2F6FB;
+  --color-sand: #C98A1B;
+  --color-sand-tint: #FFF7E8;
+  --color-rail: #FFFFFF;
+  --color-rail-hover: #F3F5F6;
 
-  --font-sign: "Inter", "Segoe UI", system-ui, sans-serif;
-  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sign: "Geist", system-ui, sans-serif;
+  --font-sans: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -33,9 +37,10 @@
 }
 
 @layer base {
-  html { @apply bg-paper text-ink font-sans antialiased; font-size: 14.5px; font-feature-settings: "cv11", "ss01"; }
+  html { @apply bg-white text-ink font-sans antialiased; font-size: 15px; }
   h1, h2, h3, h4 { @apply font-sign tracking-tight; }
   :focus-visible { outline: 2px solid #0B6E69; outline-offset: 2px; }
+  h1, h2, h3 { letter-spacing: -0.015em; }
   .tnum { font-variant-numeric: tabular-nums; }
   /* Grid cells may shrink below their content, so a wide table scrolls inside its panel instead of widening the page. */
   .grid > * { min-width: 0; }
@@ -45,7 +50,7 @@
 }
 
 @utility btn {
-  @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply inline-flex items-center justify-center gap-1.5 rounded-[10px] px-3.5 py-2 text-sm font-medium whitespace-nowrap transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 /* Data-heavy pages fit the viewport on desktop: the table scrolls inside its panel and the page itself stays put. */
@@ -59,11 +64,11 @@
 @layer components {
   .fit-scroll .table th { position: sticky; top: 0; z-index: 1; background-color: color-mix(in srgb, var(--color-paper) 60%, white); box-shadow: inset 0 -1px 0 var(--color-rule); }
   /* overflow-x: a table wider than its panel scrolls inside the panel instead of being clipped or widening the page */
-  .panel { @apply bg-white border border-rule rounded-xl; overflow-x: auto; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05); }
-  .btn-primary { @apply btn bg-route text-white shadow-xs hover:bg-route-dark; }
-  .btn-quiet { @apply btn border border-rule bg-white text-ink shadow-xs hover:bg-paper; }
-  .btn-danger { @apply btn border border-stop/40 bg-white text-stop hover:bg-stop-tint; }
-  .input { @apply w-full rounded-md border border-rule bg-white px-2.5 py-1.5 text-sm focus:border-route focus:outline-hidden; }
+  .panel { @apply bg-white border border-rule rounded-[14px]; overflow-x: auto; }
+  .btn-primary { @apply btn bg-ink font-semibold text-white hover:bg-[#26313C]; }
+  .btn-quiet { @apply btn border border-[#E1E4E8] bg-white text-ink hover:bg-paper; }
+  .btn-danger { @apply btn border border-[#E1E4E8] bg-white text-[#A12A1A] hover:bg-stop-tint; }
+  .input { @apply w-full rounded-[10px] border border-[#E1E4E8] bg-paper px-3 py-2 text-sm focus:border-route focus:bg-white focus:outline-hidden; }
   /* Dropdowns: our own chevron, inset from the edge, instead of the browser arrow pressed against the border. */
   select.input {
     appearance: none;
@@ -76,9 +81,9 @@
   }
   .label { @apply block text-xs font-medium text-ink-soft mb-1.5; }
   /* Segmented control: tabs that switch a view in place. */
-  .seg { @apply inline-flex rounded-lg border border-rule bg-white p-0.5 shadow-xs; }
-  .seg > button { @apply rounded-md px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors; }
-  .seg > button[aria-selected="true"] { @apply bg-ink text-white; }
+  .seg { @apply inline-flex flex-wrap gap-0.5 rounded-[10px] bg-[#F3F5F6] p-[3px]; }
+  .seg > button { @apply rounded-lg px-3.5 py-1.5 text-[13px] font-medium text-ink-faint transition-colors; }
+  .seg > button[aria-selected="true"], .seg > button[aria-pressed="true"], .seg > button[aria-checked="true"] { @apply bg-white text-ink shadow-[0_1px_2px_rgba(15,23,32,0.08)]; }
   .seg > button:not([aria-selected="true"]):hover { @apply text-ink; }
   /* Underlined tabs for sections of one page. */
   .tabs { @apply flex gap-6 border-b border-rule; }
@@ -87,15 +92,15 @@
   .tabs > [aria-selected="true"] { @apply border-route text-ink; }
   .count { @apply rounded-full bg-paper px-1.5 py-px text-[11px] font-semibold text-ink-soft tabular-nums; }
   .table { @apply w-full text-sm; }
-  .table th { @apply text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5 border-b border-rule bg-paper/70 whitespace-nowrap; }
-  .table td { @apply px-4 py-3 border-b border-rule/70 align-top; }
+  .table th { @apply text-left text-xs font-semibold text-ink-faint px-4 py-2.5 border-b border-rule whitespace-nowrap; }
+  .table td { @apply px-4 py-3 border-b border-rule align-top; }
   .table tbody tr { @apply transition-colors; }
   .table tr:last-child td { @apply border-b-0; }
 }
 
 /* The one orchestrated motion: the active station on a line map pulses. */
 @keyframes station-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(194, 125, 0, 0.45); }
+  0% { box-shadow: 0 0 0 0 rgba(178, 107, 0, 0.45); }
   70% { box-shadow: 0 0 0 9px rgba(194, 125, 0, 0); }
   100% { box-shadow: 0 0 0 0 rgba(194, 125, 0, 0); }
 }
@@ -109,3 +114,11 @@
 }
 .dot-wave { animation: dot-wave 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .dot-wave { animation: none; } }
+
+/* Focus: drawers, palette and the sandbox frame. */
+@keyframes drawer-in { from { transform: translateX(40px); opacity: 0; } }
+@keyframes fade-in { from { opacity: 0; } }
+.drawer-in { animation: drawer-in 0.2s ease-out; }
+.fade-in { animation: fade-in 0.15s; }
+@media (prefers-reduced-motion: reduce) { .drawer-in, .fade-in { animation: none; } }
+body.sandbox-mode #app-main { box-shadow: inset 0 0 0 3px var(--color-sand); }

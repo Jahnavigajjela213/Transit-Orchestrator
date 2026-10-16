@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import {
   ArrowUp, Bot, Check, Copy, History, Link2, MessageSquare, PanelLeft, Plus, Search, ShieldCheck, Sparkles, Trash2, Wrench, X,
@@ -63,7 +64,9 @@ export default function Assistant() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [opening, setOpening] = useState(false);
   const [waiting, setWaiting] = useState(false); // an answer is on its way for the open chat
-  const [q, setQ] = useState("");
+  // "Ask about this orchestration" links arrive with ?q=, prefilled for the person to send
+  const [params] = useSearchParams();
+  const [q, setQ] = useState(() => params.get("q") ?? "");
   const [drawer, setDrawer] = useState(false); // chat list on small screens
   const activeRef = useRef<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -254,9 +257,9 @@ export default function Assistant() {
             <button className="rounded-md p-1.5 text-ink-soft hover:bg-paper lg:hidden" onClick={() => setDrawer(true)} aria-label="Show chats"><PanelLeft className="h-5 w-5" /></button>
             <Avatar size="md" />
             <div className="min-w-0 leading-tight">
-              <h1 className="truncate font-sign text-base font-bold">{title ?? "Orchestration Assistant"}</h1>
+              <h1 className="truncate font-sign text-base font-bold">{title ?? "TransitTech Assistant"}</h1>
               <p className="flex items-center gap-1.5 text-2xs text-ink-soft">
-                <span className="h-1.5 w-1.5 rounded-full bg-go" aria-hidden /> {title ? "Orchestration Assistant · saved chat" : "Answers from your audit log, searched by meaning"}
+                <span className="h-1.5 w-1.5 rounded-full bg-go" aria-hidden /> {title ? "TransitTech Assistant · saved chat" : "Answers from your audit log, searched by meaning"}
               </p>
             </div>
           </div>

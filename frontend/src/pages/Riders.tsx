@@ -13,7 +13,7 @@ export default function Riders({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className="fit-page">
       {!embedded && <PageHeader title="Rider messages" intro="Messages sent through rider communications (TripShot / Passio), in each rider's language and preferred channel." />}
-      {wf && <p className="mb-3 text-sm">Showing messages for one <Link to={`/workflows/${wf}`} className="text-route underline">orchestration</Link>. <Link to="/simulate?tab=riders" className="text-route underline">Show all</Link></p>}
+      {wf && <p className="mb-3 text-sm">Showing messages for one <Link to={`/workflows/${wf}`} className="text-route underline">incident</Link>. <Link to="/simulate?tab=riders" className="text-route underline">Show all</Link></p>}
       {error && <ErrorNote message={error} />}
       {!data ? <Loading /> : data.length === 0 ? <div className="panel"><Empty title="No messages sent yet">Riders are notified when the agent reassigns their run.</Empty></div> : (
         <div className="panel fit-scroll">

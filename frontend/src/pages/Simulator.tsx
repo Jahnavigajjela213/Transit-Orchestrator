@@ -12,7 +12,8 @@ interface FC { code: string; description: string; system: string; severity: stri
 const sevRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 interface Failure { target: string; description: string; mode: string }
 
-export default function Simulator() {
+/** `embedded`: the Scenario testing tab of Simulate. Fault injection, outages and reset have their own tabs there. */
+export default function Simulator({ embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
   const toast = useToast();
   const { data: vehicleList, error: vehicleError } = useData<{ source: string; table: string | null; vehicles: FleetRow[] }>("/api/simulator/vehicles");
@@ -45,11 +46,11 @@ export default function Simulator() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Simulator" intro="Drive the synthetic products to see the orchestrator respond. Everything here goes through the same event backbone real products will use." />
+      {!embedded && <PageHeader title="Simulator" intro="Drive the synthetic products to see the orchestrator respond. Everything here goes through the same event backbone real products will use." />}
       {!canAct && <p className="text-sm text-ink-soft">Analysts can watch but not run simulations.</p>}
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Section title="Report a vehicle fault">
+        {!embedded && <Section title="Report a vehicle fault">
           <div className="space-y-3 p-4">
             <label className="block"><span className="label">Vehicle (in service, no active orchestration)</span>
               <select className="input" value={vehicle} onChange={(e) => setVehicle(e.target.value)}>
@@ -76,14 +77,14 @@ export default function Simulator() {
               <button className="btn-primary" disabled={busy || !canAct || !vehicle} onClick={() => run("/api/simulator/fault", { vehicle_label: vehicle, fault_code: code }, `${vehicle} reported ${code}`)}>Send fault from telematics</button>
               <button className="btn-quiet" disabled={busy || !canAct || !vehicle} onClick={() => run("/api/simulator/pm-overdue", { vehicle_label: vehicle, miles_over: 600 }, `${vehicle} flagged for overdue maintenance`)}>Flag maintenance overdue</button>
             </div>
-            {lastWf && <p className="text-sm">Started. <Link to={`/workflows/${lastWf}`} className="text-route underline">Follow the orchestration</Link> or open <Link to="/attention" className="text-route underline">Needs your attention</Link>.</p>}
+            {lastWf && <p className="text-sm">Started. <Link to={`/workflows/${lastWf}`} className="text-route underline">Follow the orchestration</Link> or open <Link to="/" className="text-route underline">Needs your attention</Link>.</p>}
           </div>
-        </Section>
+        </Section>}
 
-        <div className="space-y-5">
-          <Section title="Show de-duplication">
+        <div className={`space-y-5 ${embedded ? "lg:col-span-2 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0" : ""}`}>
+          <Section title="Late and duplicate events">
             <div className="space-y-2 p-4 text-sm">
-              <p className="text-ink-soft">Vehicles often repeat the same fault. Re-send the last fault for a vehicle within the hour; the event backbone records it as a duplicate and no second orchestration starts.</p>
+              <p className="text-ink-soft">The orchestrator tolerates late or duplicate events. Re-send the last fault for a vehicle within the hour; the event backbone records it as a duplicate and no second orchestration starts.</p>
               <DuplicateForm fleet={fleet || []} disabled={!canAct} onDone={(m) => toast(m)} onError={(m) => toast(m, "error")} />
             </div>
           </Section>
@@ -113,7 +114,7 @@ export default function Simulator() {
         </div>
       </div>
 
-      <Section title="Record a no-show">
+      <Section title="No-Show Recovery Agent: record a no-show" subtitle="Follow-on use case: detects no-shows and cancellations in trip management and proposes schedule adjustments.">
         <div className="flex flex-wrap items-end gap-4 p-4 text-sm">
           <fieldset>
             <legend className="label">What happened</legend>
@@ -149,7 +150,7 @@ export default function Simulator() {
         <CompliancePanel canAct={canAct} />
       </div>
 
-      <Section title="Simulate a product outage">
+      {!embedded && <Section title="Simulate a product outage">
         <p className="px-4 pt-3 text-sm text-ink-soft">
           "Fails once" is a short outage: the adapter retries and the step succeeds. "Keeps failing" makes the step fail, so the agent rolls back earlier steps and asks a person to finish.
         </p>
@@ -174,9 +175,9 @@ export default function Simulator() {
             </tbody>
           </table>
         </div>
-      </Section>
+      </Section>}
 
-      {user?.role === "admin" && (
+      {!embedded && user?.role === "admin" && (
         <Section title="Reset demo data">
           <div className="flex flex-wrap items-center gap-3 p-4 text-sm">
             <p className="flex-1 text-ink-soft">Deletes all orchestrations, events and audit records for both agencies and regenerates the synthetic data.</p>

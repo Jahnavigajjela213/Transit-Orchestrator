@@ -38,7 +38,7 @@ export default function WorkOrders() {
 
   return (
     <div>
-      <PageHeader title="Maintenance" eyebrow="Work orders · asset management" intro="The shop's view in asset management (FASTER). Start work first, then close it: closing a work order the agent opened returns the vehicle to the schedule automatically. New work orders can take a few seconds to show here while they sync to Databricks." />
+      <PageHeader title="Maintenance" eyebrow="Work orders · Asset Mgmt (FASTER)" intro="The shop's view in asset management. Start work first, then close it: on work order close the agent returns the vehicle to service automatically. New work orders can take a few seconds to appear while they sync to Databricks." />
       <div className="seg mb-4" role="tablist" aria-label="Status">
         {[["open,in_progress", "Open"], ["closed,cancelled", "Closed"], ["", "All"]].map(([v, l]) => (
           <button key={l} role="tab" aria-selected={status === v} onClick={() => setStatus(v)}>{l}</button>
@@ -54,7 +54,7 @@ export default function WorkOrders() {
               {rows.map((w) => (
                 <tr key={w.id}>
                   <td><div className="font-medium">{w.id}</div><div className="text-xs">{w.title}</div>
-                    {w.source === "orchestrator" && <div className="mt-0.5"><Tag color="teal">Opened by agent</Tag>{w.external_ref && <Link to={`/workflows/${w.external_ref}`} className="ml-1.5 text-2xs text-route hover:underline">orchestration</Link>}</div>}</td>
+                    {w.source === "orchestrator" && <div className="mt-0.5"><Tag color="teal">Opened by the agent</Tag>{w.external_ref && <Link to={`/workflows/${w.external_ref}`} className="ml-1.5 text-2xs text-route hover:underline">orchestration</Link>}</div>}</td>
                   <td>{label[w.asset_number] ?? ""}<div className="text-2xs text-ink-soft">{w.asset_number}</div></td>
                   <td><SeverityTag severity={w.priority} /></td>
                   <td className="text-xs">{w.shop_start ? <>{dayTime(w.shop_start)}<br />to {dayTime(w.shop_end)}<div className="text-ink-soft">{w.shop_depot}</div></> : "—"}</td>

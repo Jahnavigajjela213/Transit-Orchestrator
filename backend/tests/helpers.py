@@ -39,7 +39,10 @@ async def approve_until(client, headers, vehicle: str, stop_step: str | None = N
 
 
 async def close_work_order(client, shop_headers, wf: dict) -> None:
+    """The shop starts work, then closes the work order (closing an open work order is refused)."""
     wo_id = wf["checkpoint"]["work_order"]["work_order_id"]
+    r = await client.post(f"/products/asset-mgmt/work-orders/{wo_id}/start", json={}, headers=shop_headers)
+    assert r.status_code == 200, r.text
     r = await client.post(f"/products/asset-mgmt/work-orders/{wo_id}/close", json={"resolution": "Fixed in test"}, headers=shop_headers)
     assert r.status_code == 200, r.text
     await bus.drain()

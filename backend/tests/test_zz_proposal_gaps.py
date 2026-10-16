@@ -34,7 +34,7 @@ async def test_domain_agents_and_vestige_defect_loop(client, dispatcher, shop):
     agents_used = {d["key"] for d in wf["context"]["delegations"]}
     assert {"asset", "trip", "workforce", "safety"} <= agents_used
     assert all(d["status"] == "done" for d in wf["context"]["delegations"])
-    assert [p["step"] for p in wf["context"]["agent_plan"]][:2] == ["assess", "open_work_order"]
+    assert [p["step"] for p in wf["context"]["agent_plan"]][:3] == ["detect", "assess", "open_work_order"]
     defect = wf["checkpoint"]["defect"]
     assert defect and defect["status"] == "open"
     # Personas: the work order was opened for the approver's persona, the pull for the dispatcher.
