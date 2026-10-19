@@ -8,7 +8,7 @@ import { api } from "../../lib/api";
 import { useToast } from "../../components/Toast";
 import type { AuditRecord, FleetRow } from "../../lib/types";
 import { Empty, ErrorNote, Loading } from "../../components/ui";
-import { ReviewButton, StatTile, StatTileRow, ViewAllButton } from "../../components/dashboard/DashboardShell";
+import { OpenButton, ReviewButton, StatTile, StatTileRow, ViewAllButton } from "../../components/dashboard/DashboardShell";
 import { RecentActivity } from "../../components/dashboard/ActivityFeed";
 import { isOverdue, type WO } from "../WorkOrders";
 
@@ -164,7 +164,7 @@ export default function ShopDashboard() {
                     </div>
                     <div className="flex shrink-0 gap-2">
                       {w.status === "open" && <button type="button" className="btn-primary h-8 px-3 text-[12.5px]" onClick={() => act(w, "start")}>Start work</button>}
-                      {w.status === "in_progress" && <button type="button" className="btn-quiet h-8 px-3 text-[12.5px]" onClick={() => act(w, "close")}>Close</button>}
+                      {w.status === "in_progress" && <OpenButton label="Close" onClick={() => act(w, "close")} />}
                     </div>
                   </div>
                 </li>

@@ -79,7 +79,7 @@ export default function Workflows() {
         <div className="flex flex-wrap gap-1.5">
           {FILTERS.map(([key, label]) => (
             <button key={key} type="button" onClick={() => setFilter(key)}
-              className={`h-[34px] rounded-full px-3.5 text-[12.5px] ${filter === key ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>
+              className={`h-[34px] rounded-[10px] px-3.5 text-[12.5px] ${filter === key ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>
               {label} <span className="opacity-60 tnum">{counts[key] ?? 0}</span>
             </button>
           ))}

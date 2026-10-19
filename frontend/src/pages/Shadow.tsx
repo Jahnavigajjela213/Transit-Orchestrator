@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { Handshake, Keyboard, Timer } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
@@ -7,6 +8,7 @@ import { dayTime, easternNow, sentence, toLocalInput } from "../lib/format";
 import type { ShadowRec } from "../lib/types";
 import { useToast } from "../components/Toast";
 import { Empty, ErrorNote, Loading, PageHeader, SeverityTag, VehicleId } from "../components/ui";
+import { StatTile } from "../components/dashboard/DashboardShell";
 
 interface StepSummary {
   step: string; recommended: number; matched: number; differed: number; no_action: number; open: number;
@@ -127,16 +129,6 @@ function median(xs: number[]): number | null {
   return s[Math.floor(s.length / 2)];
 }
 
-function Kpi({ label, value, note, accent }: { label: string; value: string; note: string; accent?: boolean }) {
-  return (
-    <div className="card px-5 py-[18px]">
-      <div className="text-xs text-ink-soft">{label}</div>
-      <div className={`mt-1.5 text-[30px] font-semibold leading-tight ${accent ? "text-route" : ""}`}>{value}</div>
-      <div className="text-xs text-ink-faint">{note}</div>
-    </div>
-  );
-}
-
 export default function Shadow() {
   const { user } = useAuth();
   const toast = useToast();
@@ -183,11 +175,12 @@ export default function Shadow() {
         </>} />
 
       <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">
-        <Kpi label="Agreement with people" value={agreement === null ? "—" : `${agreement}%`} accent={agreement !== null}
-          note={compared.length ? `across ${compared.length} compared recommendation${compared.length === 1 ? "" : "s"}` : "no data yet"} />
-        <Kpi label="Agent ready earlier by" value={ahead === null ? "—" : `${Math.round(ahead)} min`} note={ahead === null ? "no data yet" : "median, agent vs first human action"} />
-        <Kpi label="Manual entries avoided" value={manual === null ? "—" : String(manual)}
-          note={manual === null ? "no data yet" : `per incident, ${metrics?.baseline_source === "measured_shadow" ? "measured in shadow mode" : "baseline"}`} />
+        <StatTile label="Agreement with people" icon={Handshake} value={agreement === null ? "—" : `${agreement}%`}
+          sub={compared.length ? `across ${compared.length} compared recommendation${compared.length === 1 ? "" : "s"}` : "no data yet"} />
+        <StatTile label="Agent ready earlier by" icon={Timer} value={ahead === null ? "—" : `${Math.round(ahead)} min`}
+          sub={ahead === null ? "no data yet" : "median, agent vs first human action"} />
+        <StatTile label="Manual entries avoided" icon={Keyboard} value={manual === null ? "—" : String(manual)}
+          sub={manual === null ? "no data yet" : `per incident, ${metrics?.baseline_source === "measured_shadow" ? "measured in shadow mode" : "baseline"}`} />
       </div>
 
       {/* left: agreement per step; right: how many comparisons are in each state (click one to filter the list) */}

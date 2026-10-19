@@ -107,8 +107,8 @@
   }
   .label { @apply block text-xs font-medium text-ink-soft mb-1.5; }
   /* Segmented control: tabs that switch a view in place. */
-  .seg { @apply inline-flex rounded-lg border border-rule bg-white p-0.5 shadow-xs; }
-  .seg > button { @apply rounded-md px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors; }
+  .seg { @apply inline-flex rounded-[10px] border border-rule bg-white p-0.5 shadow-xs; }
+  .seg > button { @apply rounded-[7px] px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors; }
   .seg > button[aria-selected="true"] { @apply bg-ink text-white; }
   .seg > button:not([aria-selected="true"]):hover { @apply text-ink; }
   /* Underlined tabs for sections of one page. */

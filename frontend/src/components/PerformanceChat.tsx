@@ -136,7 +136,7 @@ export default function PerformanceChat({ provider, suggestions }: { provider: s
             {!asking && more.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pl-9">
                 {more.map((s) => (
-                  <button key={s} onClick={() => ask(s)} className="rounded-full border border-rule bg-white px-2.5 py-1 text-2xs text-ink-soft transition hover:border-route hover:text-route">{s}</button>
+                  <button key={s} onClick={() => ask(s)} className="rounded-[10px] border border-rule bg-white px-2.5 py-1 text-2xs text-ink-soft transition hover:border-route hover:text-route">{s}</button>
                 ))}
               </div>
             )}
@@ -170,7 +170,7 @@ function AssistantMessage({ m }: { m: Extract<Msg, { role: "assistant" }> }) {
     <div className="mt-2.5 border-t border-rule/70 pt-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-ink-soft">
         <button onClick={() => setShowFacts((v) => !v)} aria-expanded={showFacts}
-                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 transition ${showFacts ? "border-route bg-route-tint text-route" : "border-rule hover:border-route hover:text-route"}`}>
+                className={`inline-flex items-center gap-1 rounded-[7px] border px-2 py-0.5 transition ${showFacts ? "border-route bg-route-tint text-route" : "border-rule hover:border-route hover:text-route"}`}>
           <Database className="h-3 w-3" aria-hidden /> {showFacts ? "Hide" : "Show"} the facts used
         </button>
         <span className="rounded-full bg-paper px-2 py-0.5">{sentence(m.intent)}</span>

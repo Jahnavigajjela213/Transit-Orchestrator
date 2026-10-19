@@ -119,7 +119,7 @@ export default function Attention() {
           <div className="flex flex-wrap gap-1.5 px-[18px] pb-3" role="radiogroup" aria-label="Kind">
             {([["all", "All", all.length], ["escalation", "Manual action", escalations], ["approval", "Approvals", all.length - escalations]] as [Kind, string, number][]).map(([k, l, n]) => (
               <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)}
-                className={`rounded-full px-2.5 py-[5px] text-xs ${kind === k ? "bg-ink font-medium text-white" : "border border-rule text-ink-soft hover:text-ink"}`}>
+                className={`rounded-[10px] px-2.5 py-[5px] text-xs ${kind === k ? "bg-ink font-medium text-white" : "border border-rule text-ink-soft hover:text-ink"}`}>
                 {l} {n}
               </button>
             ))}
