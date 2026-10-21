@@ -276,7 +276,8 @@ export default function Attention() {
             </div>
 
             {/* ------------------------------------------------------------ decision bar */}
-            <footer className="flex shrink-0 flex-wrap items-center gap-2.5 border-t border-rule bg-white px-4 py-3 sm:gap-3 sm:px-6 lg:px-8 lg:py-3.5">
+            {/* With the assistant open, the floating "more" button drops into this bar (clear of Ask's send button), so the bar leaves it room on the right. */}
+            <footer className={`flex shrink-0 flex-wrap items-center gap-2.5 border-t border-rule bg-white px-4 py-3 transition-[padding] duration-300 sm:gap-3 sm:px-6 lg:px-8 lg:py-3.5 ${drawer === "ask" ? "md:pr-[88px] lg:pr-[88px]" : ""}`}>
               {canDecide ? (
                 <>
                   <label className="min-w-[200px] max-w-[460px] flex-1 basis-full sm:basis-auto">
@@ -419,7 +420,7 @@ function ContextDrawer({ open, setOpen, detail, stepKey, cat, ask }: {
         </div>
       </aside>
       {/* Floating trigger: a single "more" button by default, the tab strip stacking up above it only once asked. */}
-      <div className="fixed bottom-24 right-6 z-30 flex flex-col items-end gap-2">
+      <div className={`fixed right-6 z-30 flex flex-col items-end gap-2 transition-[bottom] duration-300 ease-out ${open === "ask" ? "bottom-24 md:bottom-2" : "bottom-24"}`}>
         {railOpen && tabs.map(([k, label, n]) => (
           <button key={k} type="button" onClick={() => { setOpen(open === k ? null : k); setRailOpen(false); }} title={label} aria-pressed={open === k}
             className={`flex h-14 w-11 flex-col items-center justify-center gap-0.5 rounded-xl shadow-[0_6px_16px_rgba(16,24,40,0.18)] md:w-[52px] ${open === k ? "bg-route text-white" : "border border-rule bg-white text-ink-soft hover:text-ink"}`}>
