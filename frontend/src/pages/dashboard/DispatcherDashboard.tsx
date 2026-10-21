@@ -53,20 +53,22 @@ export default function DispatcherDashboard() {
     (escalated(b) ? 1 : 0) - (escalated(a) ? 1 : 0) || b.started_at.localeCompare(a.started_at)), [activeWfs]);
 
   return (
-    <div className="dash-scroll space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
-      <StatTileRow>
-        <StatTile label="Pending decisions" icon={ClipboardCheck} value={queueRaw ? decidable.length : "—"} sub="Awaiting your approval"
-          tone={decidable.length ? "warn" : "good"} onClick={() => nav("/attention")} />
-        <StatTile label="Active orchestrations" icon={GitBranch} value={wfs ? activeWfs.length : "—"} sub="Running or awaiting action"
-          onClick={() => nav("/workflows")} />
-        <StatTile label="Service disruptions" icon={AlertTriangle} value={queueRaw && fleet ? disruptionCount : "—"} sub="Trips and vehicles affected"
-          tone={disruptionCount ? "bad" : "good"} onClick={() => nav("/attention?kind=escalation")} />
-        <StatTile label="Vehicles requiring attention" icon={ShieldAlert} value={fleet ? vehiclesWithDefects.length : "—"}
-          sub={`${criticalVehicles.length} critical`} tone={criticalVehicles.length ? "bad" : vehiclesWithDefects.length ? "warn" : "good"}
-          onClick={() => nav(criticalVehicles.length ? "/work-orders?priority=critical" : "/work-orders")} />
-      </StatTileRow>
+    <div className="space-y-5 md:flex md:min-h-0 md:flex-1 md:flex-col md:space-y-0 md:gap-5 md:overflow-hidden">
+      <div className="shrink-0">
+        <StatTileRow>
+          <StatTile label="Pending decisions" icon={ClipboardCheck} value={queueRaw ? decidable.length : "—"} sub="Awaiting your approval"
+            tone={decidable.length ? "warn" : "good"} onClick={() => nav("/attention")} />
+          <StatTile label="Active orchestrations" icon={GitBranch} value={wfs ? activeWfs.length : "—"} sub="Running or awaiting action"
+            onClick={() => nav("/workflows")} />
+          <StatTile label="Service disruptions" icon={AlertTriangle} value={queueRaw && fleet ? disruptionCount : "—"} sub="Trips and vehicles affected"
+            tone={disruptionCount ? "bad" : "good"} onClick={() => nav("/attention?kind=escalation")} />
+          <StatTile label="Vehicles requiring attention" icon={ShieldAlert} value={fleet ? vehiclesWithDefects.length : "—"}
+            sub={`${criticalVehicles.length} critical`} tone={criticalVehicles.length ? "bad" : vehiclesWithDefects.length ? "warn" : "good"}
+            onClick={() => nav(criticalVehicles.length ? "/work-orders?priority=critical" : "/work-orders")} />
+        </StatTileRow>
+      </div>
 
-      <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
+      <div className="grid shrink-0 grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
         <section className="card flex h-full flex-col p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-[15px] font-semibold">Needs your attention</h2>

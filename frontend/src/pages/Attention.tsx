@@ -288,7 +288,7 @@ export default function Attention() {
                   <span className="flex-1" />
                   <Link to={`/workflows/${current.workflow_id}`} className="mr-1 hidden text-[13px] font-medium md:inline">Open orchestration</Link>
                   {current.kind === "approval" && (
-                    <button type="button" disabled={busy} onClick={() => send("reject")} className="btn-lg border border-rule bg-white text-ink hover:bg-panel">
+                    <button type="button" disabled={busy} onClick={() => send("reject")} className="btn-lg border border-stop-line bg-stop-tint text-stop hover:bg-stop-tint/70">
                       Reject
                     </button>
                   )}
@@ -344,7 +344,7 @@ function StepNode({ step, n, last, travelled, agents, onAgents }: {
         <Icon className="h-4 w-4" aria-hidden />
       </span>
       <span className={`mt-2.5 text-[12.5px] font-semibold ${s === "awaiting_approval" ? "text-signal-ink" : red ? "text-stop" : done ? "text-ink" : "text-ink-faint"}`}>{step.label}</span>
-      <span className="mt-0.5 text-[11px] text-ink-faint">{state}</span>
+      <span className="mt-1.5 rounded-full bg-[#EEF1F0] px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{state}</span>
       {agents && (
         <button type="button" onClick={onAgents} className="mt-1.5 rounded-full px-2 py-0.5 text-[10.5px] text-ink-soft hover:bg-route-tint hover:text-route-dark"
           aria-label={`${step.label}: show its agents`}>

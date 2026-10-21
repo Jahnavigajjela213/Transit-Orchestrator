@@ -22,20 +22,20 @@ export function RecentActivity({ title, viewAllHref, activity, error, vehicleOf 
 }) {
   const nav = useNavigate();
   return (
-    <section className="card p-4">
-      <div className="flex items-center justify-between gap-2">
+    <section className="card flex min-h-0 flex-1 flex-col p-4">
+      <div className="flex shrink-0 items-center justify-between gap-2">
         <h2 className="text-[15px] font-semibold">{title}</h2>
         <ViewAllButton onClick={() => nav(viewAllHref)} />
       </div>
-      {error && <div className="mt-3"><ErrorNote message={error} /></div>}
+      {error && <div className="mt-3 shrink-0"><ErrorNote message={error} /></div>}
       {!activity ? <div className="mt-2"><Loading /></div> : activity.length === 0 ? <div className="mt-2"><Empty title="No activity yet" /></div> : (
-        <div className="mt-3 overflow-x-auto">
-          <div className="min-w-[800px]">
-            <div className={`${ACTIVITY_GRID} hidden border-b border-rule pb-2 text-[11px] uppercase tracking-[0.08em] text-ink-faint sm:grid`}>
+        <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-x-auto">
+          <div className="flex min-h-0 flex-1 flex-col min-w-[800px]">
+            <div className={`${ACTIVITY_GRID} hidden shrink-0 border-b border-rule pb-2 text-[11px] uppercase tracking-[0.08em] text-ink-faint sm:grid`}>
               <span>Date &amp; time</span><span>Vehicle</span><span>What happened</span><span>Agent</span>
             </div>
-            {/* The page settles; once there's more than fits, this list scrolls in place instead of growing the page. */}
-            <div className="max-h-[380px] divide-y divide-rule-soft overflow-y-auto">
+            {/* The dashboard screen itself never scrolls - this list always fills whatever room is left and scrolls in place. */}
+            <div className="min-h-0 flex-1 divide-y divide-rule-soft overflow-y-auto">
               {activity.map((r) => {
                 const { title: rowTitle, showActor } = describeActivity(r);
                 const vehicle = r.workflow_id ? vehicleOf[r.workflow_id] : null;

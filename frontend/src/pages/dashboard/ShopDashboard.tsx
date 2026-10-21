@@ -76,19 +76,21 @@ export default function ShopDashboard() {
   const dataLoaded = !!wos && !!fleet;
 
   return (
-    <div className="dash-scroll space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
-      <StatTileRow>
-        <StatTile label="Open work orders" icon={Wrench} value={wos ? openWos.length : "—"} sub="Open or in progress"
-          tone={openWos.length ? "warn" : "good"} onClick={() => nav("/work-orders")} />
-        <StatTile label="Critical vehicle faults" icon={ShieldAlert} value={fleet ? criticalDefects.length : "—"} sub="Unresolved, critical severity"
-          tone={criticalDefects.length ? "bad" : "good"} onClick={() => nav("/work-orders?priority=critical")} />
-        <StatTile label="Overdue maintenance" icon={Clock} value={wos ? overdueWos.length : "—"} sub="Past their shop window"
-          tone={overdueWos.length ? "bad" : "good"} onClick={() => nav("/work-orders?overdue=1")} />
-        <StatTile label="Vehicles out of service" icon={Ban} value={o ? o.vehicles.out_of_service : "—"} sub={o ? `of ${o.vehicles.total} vehicles` : undefined}
-          tone={o?.vehicles.out_of_service ? "warn" : "good"} onClick={() => nav("/work-orders")} />
-      </StatTileRow>
+    <div className="space-y-5 md:flex md:min-h-0 md:flex-1 md:flex-col md:space-y-0 md:gap-5 md:overflow-hidden">
+      <div className="shrink-0">
+        <StatTileRow>
+          <StatTile label="Open work orders" icon={Wrench} value={wos ? openWos.length : "—"} sub="Open or in progress"
+            tone={openWos.length ? "warn" : "good"} onClick={() => nav("/work-orders")} />
+          <StatTile label="Critical vehicle faults" icon={ShieldAlert} value={fleet ? criticalDefects.length : "—"} sub="Unresolved, critical severity"
+            tone={criticalDefects.length ? "bad" : "good"} onClick={() => nav("/work-orders?priority=critical")} />
+          <StatTile label="Overdue maintenance" icon={Clock} value={wos ? overdueWos.length : "—"} sub="Past their shop window"
+            tone={overdueWos.length ? "bad" : "good"} onClick={() => nav("/work-orders?overdue=1")} />
+          <StatTile label="Vehicles out of service" icon={Ban} value={o ? o.vehicles.out_of_service : "—"} sub={o ? `of ${o.vehicles.total} vehicles` : undefined}
+            tone={o?.vehicles.out_of_service ? "warn" : "good"} onClick={() => nav("/work-orders")} />
+        </StatTileRow>
+      </div>
 
-      <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
+      <div className="grid shrink-0 grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
         <section className="card flex h-full flex-col p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-[15px] font-semibold">Critical maintenance alerts</h2>
@@ -174,9 +176,9 @@ export default function ShopDashboard() {
         </section>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
-        <section className="card p-4">
-          <div className="flex items-start justify-between gap-3">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
+        <section className="card flex flex-col overflow-y-auto p-4">
+          <div className="flex shrink-0 items-start justify-between gap-3">
             <h2 className="text-[15px] font-semibold">Maintenance status overview</h2>
             {dataLoaded && (
               <div className="flex shrink-0 items-stretch gap-2.5 text-right">
@@ -192,30 +194,30 @@ export default function ShopDashboard() {
             )}
           </div>
           {!dataLoaded ? <div className="mt-2"><Loading /></div> : (
-            <div className="mt-3 flex flex-col gap-5">
+            <div className="mt-3 flex flex-1 flex-col justify-center gap-5">
               <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Faults by severity</h3>
+                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-faint">Faults by severity</h3>
                 <div className="space-y-2">
                   {([["Critical", faultsBySeverity.critical, "bg-stop"], ["High", faultsBySeverity.high, "bg-signal"], ["Medium", faultsBySeverity.medium, "bg-route"], ["Low", faultsBySeverity.low, "bg-ink-faint"]] as [string, number, string][]).map(([l, n, bar]) => {
                     const total = Object.values(faultsBySeverity).reduce((a, b) => a + b, 0);
                     return (
-                      <div key={l} className="flex items-center gap-2">
-                        <span className="w-[72px] shrink-0 text-xs font-medium">{l}</span>
-                        <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[#EEF1F0]"><div className={`h-full rounded-full ${bar}`} style={{ width: `${total ? (n / total) * 100 : 0}%` }} /></div>
-                        <span className="w-5 shrink-0 text-right text-xs font-semibold tnum">{n}</span>
+                      <div key={l} className="flex items-center gap-3">
+                        <span className="w-24 shrink-0 text-sm font-medium">{l}</span>
+                        <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#EEF1F0]"><div className={`h-full rounded-full ${bar}`} style={{ width: `${total ? (n / total) * 100 : 0}%` }} /></div>
+                        <span className="w-7 shrink-0 text-right text-base font-semibold tnum">{n}</span>
                       </div>
                     );
                   })}
                 </div>
               </div>
               <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Work orders by status</h3>
+                <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-faint">Work orders by status</h3>
                 <div className="space-y-2">
                   {([["Open", wosByStatus.open, "bg-signal"], ["In progress", wosByStatus.in_progress, "bg-shop"], ["Closed", wosByStatus.closed, "bg-go"], ["Cancelled", wosByStatus.cancelled, "bg-ink-faint"]] as [string, number, string][]).map(([l, n, bar]) => (
-                    <div key={l} className="flex items-center gap-2">
-                      <span className="w-[72px] shrink-0 text-xs font-medium">{l}</span>
-                      <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[#EEF1F0]"><div className={`h-full rounded-full ${bar}`} style={{ width: `${(wos?.length ? (n / wos.length) * 100 : 0)}%` }} /></div>
-                      <span className="w-5 shrink-0 text-right text-xs font-semibold tnum">{n}</span>
+                    <div key={l} className="flex items-center gap-3">
+                      <span className="w-24 shrink-0 text-sm font-medium">{l}</span>
+                      <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#EEF1F0]"><div className={`h-full rounded-full ${bar}`} style={{ width: `${(wos?.length ? (n / wos.length) * 100 : 0)}%` }} /></div>
+                      <span className="w-7 shrink-0 text-right text-base font-semibold tnum">{n}</span>
                     </div>
                   ))}
                 </div>
