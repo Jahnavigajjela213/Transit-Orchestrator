@@ -20,7 +20,7 @@ export function Dropdown({ value, items, onChange, placeholder = "Select…", al
   return (
     <div ref={ref} className={`relative ${className ?? "min-w-0 flex-1"}`}>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} disabled={items.length === 0}
-        className="input flex h-[34px] w-full items-center justify-between gap-2 text-left text-[13px] text-ink disabled:opacity-60">
+        className="input flex h-[34px] w-full items-center justify-between gap-2 pr-3 text-left text-[13px] text-ink disabled:opacity-60">
         <span className="truncate">{current}</span>
         <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
       </button>

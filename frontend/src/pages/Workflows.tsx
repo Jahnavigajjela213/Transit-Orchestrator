@@ -40,7 +40,6 @@ export const escalated = (w: Workflow) => w.steps.some((s) => s.status === "esca
 
 export default function Workflows() {
   const [params] = useSearchParams();
-  const [view, setView] = useState<"list" | "board">("list");
   // A dashboard KPI can land here pre-filtered, e.g. /workflows?status=issues.
   const [filter, setFilter] = useState<Group | "all">(() => {
     const s = params.get("status");
@@ -65,14 +64,6 @@ export default function Workflows() {
         <div className="min-w-[260px] flex-1">
           <p className="text-ink-soft">Every vehicle fault the agent picked up, and where it stands on its seven steps.</p>
         </div>
-        <div role="tablist" aria-label="View" className="flex rounded-[10px] border border-rule bg-white p-[3px]">
-          {(["list", "board"] as const).map((v) => (
-            <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
-              className={`h-8 rounded-[7px] px-3.5 text-xs ${view === v ? "bg-ink font-semibold text-white" : "text-ink-soft"}`}>
-              {v === "list" ? "List" : "Board"}
-            </button>
-          ))}
-        </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -96,7 +87,7 @@ export default function Workflows() {
       {error && <ErrorNote message={error} />}
       {!data ? <div className="card"><Loading /></div> : rows.length === 0 ? (
         <div className="card"><Empty title="No orchestrations match">Try another filter, or <Link to="/simulate" className="text-route underline">simulate a vehicle fault</Link>.</Empty></div>
-      ) : view === "list" ? <ListView rows={rows} /> : <BoardView rows={rows} />}
+      ) : <ListView rows={rows} />}
     </>
   );
 }
@@ -107,15 +98,17 @@ const GRID = "grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 gap-y-2.5 lg:grid
 
 function ListView({ rows }: { rows: Workflow[] }) {
   return (
-    <section className="card overflow-hidden">
-      <div className={`${GRID} border-b border-rule bg-panel px-[18px] py-3 eyebrow max-lg:hidden`}>
+    // From tablet width up the table fills the window and only its rows scroll, under a fixed header.
+    <section className="card flex flex-col overflow-hidden md:min-h-0 md:flex-1">
+      <div className={`${GRID} shrink-0 border-b border-rule bg-panel px-[18px] py-3 eyebrow max-lg:hidden`}>
         <span>Vehicle</span><span>Incident</span><span>Status</span><span>Progress</span><span className="text-right">Runs covered</span><span>Detected</span><span />
       </div>
+      <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
       {rows.map((w) => {
         const g = groupOf(w), step = currentStep(w), esc = escalated(w);
         const [label, tone] = STATUS[g];
         return (
-          <Link key={w.id} to={`/workflows/${w.id}`} className={`${GRID} items-center border-b border-rule-soft px-[18px] py-3.5 text-ink last:border-b-0 hover:bg-panel`}>
+          <Link key={w.id} to={`/workflows/${w.id}`} className={`${GRID} items-center border-b border-rule-soft px-[18px] py-3 text-ink last:border-b-0 hover:bg-panel`}>
             <span><span className="chip-v">{w.vehicle_label}</span></span>
             <span className="min-w-0">
               <span className="block truncate font-semibold">{w.title.replace(`${w.vehicle_label}: `, "")}</span>
@@ -141,55 +134,7 @@ function ListView({ rows }: { rows: Workflow[] }) {
           </Link>
         );
       })}
-    </section>
-  );
-}
-
-const HUMAN_STEPS = new Set([3, 4, 5]);
-
-function BoardView({ rows }: { rows: Workflow[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <div className="grid min-w-[1100px] grid-cols-7 gap-3">
-        {STEPS.map((label, i) => {
-          const n = i + 1;
-          const cards = rows.filter((w) => Math.min(currentStep(w), 7) === n);
-          const human = HUMAN_STEPS.has(n);
-          return (
-            <section key={label} className={`flex min-h-[420px] flex-col rounded-[14px] border ${human ? "border-signal-line bg-[#FBF5EA]" : "border-rule bg-[#ECEFEE]"}`}>
-              <div className="px-3.5 pb-2.5 pt-3.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] text-ink-faint">{String(n).padStart(2, "0")}</span>
-                  <h2 className="flex-1 text-[13.5px] font-semibold">{label}</h2>
-                  <span className="text-xs text-ink-faint">{cards.length}</span>
-                </div>
-                <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${human ? "bg-signal-tint text-signal-ink" : "bg-route-tint text-route-dark"}`}>
-                  {human ? "You approve" : "Agent"}
-                </span>
-              </div>
-              <div className="flex flex-col gap-2 px-2.5 pb-3">
-                {cards.map((w) => {
-                  const g = groupOf(w), esc = escalated(w);
-                  return (
-                    <Link key={w.id} to={`/workflows/${w.id}`}
-                      className={`block rounded-xl border bg-white p-3 text-ink ${esc ? "border-stop-line" : "border-rule"} hover:border-route`}>
-                      <span className="flex items-center gap-1.5">
-                        <span className="chip-v">{w.vehicle_label}</span>
-                        {w.severity && <span className={`rounded-full px-[7px] py-0.5 text-[10.5px] font-semibold ${w.severity === "critical" ? "bg-stop-tint text-stop" : w.severity === "high" ? "bg-signal-tint text-signal-ink" : "bg-route-tint text-route-dark"}`}>{sentence(w.severity)}</span>}
-                      </span>
-                      <span className="mt-2 block text-[13px] font-semibold leading-snug">{w.title.replace(`${w.vehicle_label}: `, "")}</span>
-                      <span className={`mt-2.5 inline-block text-[11px] font-semibold ${esc ? "text-stop" : g === "approval" ? "text-signal-ink" : "text-route"}`}>
-                        {esc ? "Manual action" : STATUS[g][0]}
-                      </span>
-                    </Link>
-                  );
-                })}
-                {cards.length === 0 && <span className="px-1 py-2.5 text-xs text-[#9AA4AB]">Nothing here</span>}
-              </div>
-            </section>
-          );
-        })}
       </div>
-    </div>
+    </section>
   );
 }

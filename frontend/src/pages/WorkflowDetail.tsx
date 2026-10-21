@@ -173,7 +173,7 @@ function AgentPanel({ step, index, cat, workflowType, delegations, onClose }: {
           <div key={pa.key + pa.task} className="rounded-[10px] border border-rule bg-white px-3.5 py-3">
             <div className="font-semibold">{ag.name} <span className="text-xs font-normal text-ink-faint">· {ag.role}</span></div>
             <div className="mt-1 text-[13px]">{pa.task}</div>
-            <div className="mt-1.5 text-[11.5px] text-ink-soft">{ag.product.split(" (")[0]} · <span className="font-mono">{ag.data.join(", ")}</span></div>
+            <div className="mt-1.5 text-[11.5px] text-ink-soft">{ag.product.split(" (")[0]} · <span className="font-agent text-ink">{ag.data.join(", ")}</span></div>
             <div className={`mt-1.5 text-[11.5px] ${failed ? "text-stop" : ran.length ? "text-go" : "text-ink-faint"}`}>
               {failed ? `Failed: ${failed.error ?? ""}` : ran.length ? `✓ Ran ${ran.length} task${ran.length === 1 ? "" : "s"} · ${ran.reduce((n, d) => n + d.duration_ms, 0)} ms` : "Not yet"}
             </div>
@@ -318,10 +318,23 @@ function tabRows(tab: TabKey, wf: WD, delegations: Delegation[]): { a: ReactNode
     delegations.forEach((d) => by.set(d.agent, [...(by.get(d.agent) || []), d]));
     if (!by.size) return [{ a: "No agent activity yet", b: "", c: "" }];
     return [...by.entries()].map(([agent, ds]) => ({
-      a: agent, b: [...new Set(ds.map((d) => d.task))].join(" · "),
+      a: agent, b: <AgentTasks tasks={[...new Set(ds.map((d) => d.task))]} failed={new Set(ds.filter((d) => d.status === "failed").map((d) => d.task))} />,
       c: `${ds.length} task${ds.length === 1 ? "" : "s"} · ${ds.reduce((n, d) => n + d.duration_ms, 0)} ms${ds.some((d) => d.status === "failed") ? " · failed" : ""}`,
     }));
   }
   if (!wf.notifications.length) return [{ a: "Nothing sent yet", b: "Riders are told once their run moves to a spare vehicle (step 6), by SMS, app or email in their language.", c: "TripShot / Passio" }];
   return wf.notifications.map((n) => ({ a: n.rider_name, b: n.message, c: `${n.channel} · ${n.language} · ${time(n.created_at)} · ${kindLabel(n.kind)}` }));
+}
+
+/** What an agent did, set apart from people's text by the agent font: its own task names, comma separated. */
+function AgentTasks({ tasks, failed }: { tasks: string[]; failed: Set<string> }) {
+  return (
+    <span className="font-agent text-[12.5px] text-ink">
+      {tasks.map((t, i) => (
+        <span key={t}>
+          <span className={failed.has(t) ? "text-stop" : undefined}>{t}</span>{i < tasks.length - 1 && ", "}
+        </span>
+      ))}
+    </span>
+  );
 }
