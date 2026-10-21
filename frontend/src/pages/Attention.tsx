@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { AlertTriangle, Bell, CheckCircle2, ChevronLeft, ChevronRight, MoreVertical, Radar, SearchCheck, Shuffle, Sparkles, Truck, Wrench, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, MoreVertical, Sparkles, X } from "lucide-react";
+import { STEP_ICON } from "../lib/stepIcons";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData, useLive } from "../lib/live";
 import { useAttentionQueue } from "../lib/queue";
 import { ago, clockET, roleName, sentence, words } from "../lib/format";
-import type { Approval, Step, WorkflowDetail } from "../lib/types";
+import type { Approval, Step, Workflow, WorkflowDetail } from "../lib/types";
 import { initialOverride, StepBody, UncoveredRuns } from "../components/DecisionCard";
 import { loadCatalogue, type AgentsResponse } from "../components/AgentFlow";
 import { useToast } from "../components/Toast";
@@ -25,6 +26,8 @@ type DrawerKey = "ask" | "agents" | "trail" | "systems" | "riders";
 const SEV_DOT: Record<string, string> = { critical: "#B42318", high: "#D98A00", medium: "#0B6E69", low: "#7D8891" };
 const verb: Record<string, string> = { approve: "Approved", reject: "Rejected", override: "Changed and approved", acknowledge: "Acknowledged" };
 const EDITABLE = ["open_work_order", "pull_vehicle", "reassign_runs"];
+// Steps whose next decision is worth waiting for on the same vehicle.
+const FOLLOW_UNTIL = ["detect", "assess", "open_work_order", "pull_vehicle", "reassign_runs"];
 
 export default function Attention() {
   const { user } = useAuth();
@@ -43,7 +46,13 @@ export default function Attention() {
     const k = params.get("kind");
     return k === "escalation" || k === "approval" ? k : "all";
   });
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPickedRaw] = useState<string | null>(null);
+  // After a decision the page stays on that vehicle's orchestration instead of jumping to another case: its next step
+  // shows here if it needs a person, otherwise where it now stands, until the user moves on.
+  const [follow, setFollow] = useState<{ workflowId: string; vehicle: string | null; did: string; decided: string } | null>(null);
+  const setPicked = (id: string | null) => { setFollow(null); setPickedRaw(id); };
+  // Decisions just sent, kept out of the queue until it reloads, so the page never lands back on one of them.
+  const [sent, setSent] = useState<Set<string>>(() => new Set());
   const [drawer, setDrawer] = useState<DrawerKey | null>(null);
   const [drawerStep, setDrawerStep] = useState<string | null>(null);
   // The queue and the right-hand drawer take turns: opening one collapses the other, so the decision keeps its room.
@@ -56,8 +65,19 @@ export default function Attention() {
   const [clock, setClock] = useState(clockET());
   useEffect(() => { const id = window.setInterval(() => setClock(clockET()), 15000); return () => window.clearInterval(id); }, []);
 
-  const queue = all.filter((a) => kind === "all" || a.kind === kind || (kind === "approval" && a.kind === "informational"));
-  const current = queue.find((a) => a.id === picked) ?? queue[0] ?? null;
+  const queue = all.filter((a) => !sent.has(a.id)).filter((a) => kind === "all" || a.kind === kind || (kind === "approval" && a.kind === "informational"));
+  const followed = follow ? queue.find((a) => a.workflow_id === follow.workflowId && a.id !== follow.decided) ?? null : null;
+  const current = follow ? followed : queue.find((a) => a.id === picked) ?? queue[0] ?? null;
+  // The followed orchestration's next decision arrived: it becomes the one in focus.
+  useEffect(() => { if (followed) { setFollow(null); setPickedRaw(followed.id); } }, [followed?.id]);
+  // Once the followed orchestration is past Reassign runs (riders, the shop, or finished), nothing more is coming for
+  // it here: move on to the next case, or "all caught up".
+  const followedWf = follow ? byId[follow.workflowId] : undefined;
+  useEffect(() => {
+    if (!follow || !followedWf) return;
+    const next = (followedWf.steps ?? []).find((x) => x.status !== "done");
+    if (followedWf.status !== "running" && followedWf.status !== "awaiting_approval" || (next && !FOLLOW_UNTIL.includes(next.key))) setFollow(null);
+  }, [follow, followedWf]);
   const wf = current ? byId[current.workflow_id] : null;
   const steps: Step[] = wf?.steps ?? [];
   const stepIndex = current ? steps.findIndex((s) => s.key === current.step) : -1;
@@ -75,8 +95,11 @@ export default function Attention() {
     try {
       await api.post(`/api/approvals/${current.id}/decision`, { action, note: note || undefined, override: action === "override" ? override : undefined });
       toast(`${verb[action]}: ${current.title}`);
-      const i = queue.findIndex((a) => a.id === current.id);
-      setPicked(queue[i + 1]?.id ?? queue[i - 1]?.id ?? null);
+      setSent((x) => new Set(x).add(current.id));
+      setPickedRaw(null);
+      // Up to Reassign runs the same vehicle's next decision follows in place; after it, go on to the next case.
+      setFollow(FOLLOW_UNTIL.includes(current.step) && current.step !== "reassign_runs"
+        ? { workflowId: current.workflow_id, vehicle: current.vehicle_label, did: verb[action], decided: current.id } : null);
       reload();
     } catch (e: any) { toast(e.message, "error"); } finally { setBusy(false); }
   }
@@ -212,7 +235,9 @@ export default function Attention() {
           </nav>
         )}
 
-        {!data ? <div className="p-8"><Loading /></div> : !current ? (
+        {!data ? <div className="p-8"><Loading /></div> : !current && follow ? (
+          <Followed follow={follow} wf={byId[follow.workflowId]} waiting={queue.filter((a) => a.id !== follow.decided).length} onNext={() => setPicked(queue.find((a) => a.id !== follow.decided)?.id ?? null)} />
+        ) : !current ? (
           <div className="flex flex-1 items-center justify-center p-8">
             <div className="text-center">
               <p className="text-lg font-semibold">You're all caught up</p>
@@ -316,11 +341,6 @@ export default function Attention() {
 function shortTitle(a: Approval): string {
   return a.title.replace(new RegExp(`\\s*(for|on)\\s+${a.vehicle_label}\\b`), "").replace(`${a.vehicle_label} `, "").trim();
 }
-
-const STEP_ICON: Record<string, typeof Radar> = {
-  detect: Radar, assess: SearchCheck, open_work_order: Wrench, pull_vehicle: Truck,
-  reassign_runs: Shuffle, notify_riders: Bell, return_to_service: CheckCircle2,
-};
 
 function StepNode({ step, n, last, travelled, agents, onAgents }: {
   step: Step; n: number; last: boolean; travelled: boolean; agents: string; onAgents?: () => void;
@@ -434,5 +454,43 @@ function ContextDrawer({ open, setOpen, detail, stepKey, cat, ask }: {
         </button>
       </div>
     </>
+  );
+}
+
+/** What a decision led to: the same orchestration, moving on. Shown until its next decision arrives or the user moves on. */
+function Followed({ follow, wf, waiting, onNext }: {
+  follow: { workflowId: string; vehicle: string | null; did: string; decided: string }; wf: Workflow | undefined; waiting: number; onNext: () => void;
+}) {
+  const steps: Step[] = wf?.steps ?? [];
+  const at = steps.findIndex((s) => ["active", "awaiting_approval", "waiting", "escalated"].includes(s.status));
+  const done = wf && ["completed", "completed_with_issues", "failed", "rejected", "compensated"].includes(wf.status);
+  const where = !wf ? "Moving on to the next step…"
+    : done ? `This orchestration has ${wf.status === "completed" ? "completed" : `ended: ${sentence(wf.status)}`}.`
+    : at >= 0 && steps[at].status === "waiting" ? `Now at step ${at + 1}, ${steps[at].label}: waiting on the shop to start and close the work order.`
+    : at >= 0 ? `Now at step ${at + 1}, ${steps[at].label}. If it needs you, it will appear here.`
+    : "The agent is carrying out the next step…";
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+      <div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-go">{follow.did}</div>
+        <h1 className="mt-1.5 flex flex-wrap items-center gap-3 text-[21px] font-semibold tracking-[-0.01em] sm:text-[26px]">
+          {follow.vehicle && <span className="chip-v px-2.5 py-1 text-[15px]">{follow.vehicle}</span>}
+          {wf?.title.replace(`${follow.vehicle}: `, "") ?? "Orchestration"}
+        </h1>
+        <p className="mt-2 text-[13px] text-ink-soft">{where}</p>
+      </div>
+      {steps.length > 0 && (
+        <section aria-label="Seven-step flow" className="card overflow-x-auto px-5 pb-4 pt-5">
+          <ol className="grid min-w-[600px] grid-cols-7">
+            {steps.map((s, i) => <StepNode key={s.key} step={s} n={i + 1} last={i === steps.length - 1} travelled={at < 0 ? s.status === "done" : i < at} agents="" />)}
+          </ol>
+        </section>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        {waiting > 0 && <button type="button" onClick={onNext} className="btn-lg bg-signal px-[22px] font-semibold text-white hover:bg-signal/90">Next decision ({waiting})</button>}
+        <Link to={`/workflows/${follow.workflowId}`} className="btn-lg border border-rule bg-white text-ink no-underline hover:bg-panel">Open orchestration</Link>
+        {waiting === 0 && <span className="text-sm text-ink-soft">Nothing else is waiting for you.</span>}
+      </div>
+    </div>
   );
 }

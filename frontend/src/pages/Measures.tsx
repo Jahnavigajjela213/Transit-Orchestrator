@@ -33,15 +33,18 @@ interface Card {
 const fmtMin = (m: number | null | undefined) => (m == null ? "not measured" : m >= 60 ? `${Math.floor(m / 60)} h ${Math.round(m % 60)} min` : `${m} min`);
 const pct = (v: number | null | undefined) => (v == null ? "not measured" : `${v}%`);
 
-function cards(m: Values, b: Record<string, number | null>): Card[] {
+function cards(m: Values, b: Record<string, number | null>, source: string): Card[] {
+  // Fault to work order "before" is the manual process, which the proposal puts at hours today. A shadow-mode figure
+  // times the agent itself, so it is not a "before": only a Phase 0 study figure replaces the proposal's "Hours".
+  const byHand = source === "entered" && b.detect_to_work_order_minutes != null ? b.detect_to_work_order_minutes : null;
   const st = (v: number | null, ok: boolean): Status => (v == null ? "none" : ok ? "ok" : "close");
   const v = m;
   return [
     { label: "Fault detection to open work order", question: "When a bus reports a fault, how long until a repair job exists in FASTER?",
       key: "detect_to_work_order_minutes", value: v.detect_to_work_order_minutes == null ? "—" : String(v.detect_to_work_order_minutes),
       unit: v.detect_to_work_order_minutes == null ? "no data yet" : `min median · ${v.detect_to_work_order_samples} work order${v.detect_to_work_order_samples === 1 ? "" : "s"}, incl. approval wait`,
-      baseline: fmtMin(b.detect_to_work_order_minutes), target: "Under 5 min", status: st(v.detect_to_work_order_minutes, (v.detect_to_work_order_minutes ?? 99) < 5),
-      now: v.detect_to_work_order_minutes, before: b.detect_to_work_order_minutes, kind: "min", lower: true },
+      baseline: byHand == null ? "Hours today" : fmtMin(byHand), target: "Under 5 min", status: st(v.detect_to_work_order_minutes, (v.detect_to_work_order_minutes ?? 99) < 5),
+      now: v.detect_to_work_order_minutes, before: byHand, kind: "min", lower: true },
     { label: "Manual re-entry across products", question: "How often did someone retype the same thing into another system by hand?",
       key: "manual_reentries_per_incident", value: v.manual_reentries_per_incident == null ? "—" : String(v.manual_reentries_per_incident),
       unit: v.manual_reentries_per_incident == null ? "no data yet" : "per incident",
@@ -175,7 +178,7 @@ export default function Measures() {
           </section>
 
           <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
-            {cards(data.measures, data.baseline).map((c) => {
+            {cards(data.measures, data.baseline, data.baseline_source).map((c) => {
               const series = data.weeks.map((w) => w[c.key] as number | null);
               const [statusText, statusTone] = STATUS_UI[c.status];
               return (

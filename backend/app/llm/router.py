@@ -49,7 +49,12 @@ SYSTEM_PROMPTS = {
         "- Answer exactly what was asked, directly, in the first sentence. Do not retell the whole incident.\n"
         "- Use the earlier conversation only to understand what words like 'it' or 'this' refer to.\n"
         "- Quote names, vehicle numbers, times and IDs exactly as written in the records.\n"
-        "- If the records do not contain the answer, say you could not find it in the audit log. Never guess.\n"
+        "- If the records do not contain the answer, look at 'Where each step stands'. When the question is about a step "
+        "that has not happened yet (waiting for a decision, waiting on the shop, or not reached), say so plainly: it has not "
+        "happened yet because the orchestration has not got past that step, and say where it is now. For example: 'The work "
+        "order has not been approved yet: P-209 is waiting for a dispatcher's decision at step 3, Open work order.'\n"
+        "- Only when the step is done and the records still do not answer it, say you could not find it in the audit log. "
+        "Never guess.\n"
         "- Plain text only, no markdown, no headings, no bullet symbols. At most 4 short sentences."
     ),
 }
@@ -58,6 +63,13 @@ SYSTEM_PROMPTS = {
 def _clip(t: str, n: int) -> str:
     t = (t or "").strip()
     return t if len(t) <= n else t[: n - 3].rsplit(" ", 1)[0] + "..."
+
+
+# A step's state in words, for the assistant prompt.
+STEP_STATE = {"done": "done", "pending": "not reached yet", "not_run": "not reached", "active": "in progress",
+              "awaiting_approval": "waiting for a dispatcher's decision (not approved yet)", "waiting": "waiting on the shop to close the work order",
+              "escalated": "raised with a person, waiting on them", "skipped": "skipped", "failed": "failed", "shadowed": "recorded in shadow mode only",
+              "recommended": "recommended", "compensated": "undone"}
 
 
 def assistant_prompt(ctx: dict) -> str:
@@ -74,6 +86,11 @@ def assistant_prompt(ctx: dict) -> str:
     if wf:
         parts.append(f"The orchestration this is about: {wf.get('title')} (vehicle {wf.get('vehicle_label')}), "
                      f"status {str(wf.get('status', '')).replace('_', ' ')}. {_clip(wf.get('summary') or '', 600)}")
+        steps = wf.get("steps") or []
+        if steps:  # lets the model tell "not in the log" apart from "that step has not happened yet"
+            parts.append("Where each step stands:\n" + "\n".join(
+                f"- Step {i} {x.get('label') or x.get('key')}: {STEP_STATE.get(x.get('status'), str(x.get('status', '')).replace('_', ' '))}"
+                for i, x in enumerate(steps, 1)))
         lines = []
         for a in ctx.get("audit", []):
             what = " ".join(x for x in (a["record_type"].replace("_", " "), (a.get("step") or "").replace("_", " ")) if x)
@@ -81,6 +98,13 @@ def assistant_prompt(ctx: dict) -> str:
             lines.append(f"- {a['created_at'][:16].replace('T', ' ')} {a['actor']}{act}: {what}. {_clip(a.get('explanation') or '', 260)}")
         if lines:
             parts.append("Its full timeline, oldest first:\n" + "\n".join(lines[-30:]))
+    asked = ctx.get("asked_step")
+    if asked and asked.get("status") not in ("done", "compensated", "failed", "skipped"):
+        current = next((f"step {i} {x.get('label')}" for i, x in enumerate((wf or {}).get("steps") or [], 1)
+                        if x.get("status") in ("awaiting_approval", "active", "waiting", "escalated")), None)
+        parts.append(f"Note: the question is about step {asked['n']} {asked['label']}, which has NOT happened yet "
+                     f"({STEP_STATE.get(asked['status'], asked['status'])}). Answer that it has not happened yet"
+                     + (f" and that the orchestration is now at {current}." if current else "."))
     parts.append(f"Question: {ctx['question']}")
     return "\n\n".join(parts)
 

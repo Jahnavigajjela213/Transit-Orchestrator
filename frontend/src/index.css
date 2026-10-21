@@ -151,6 +151,19 @@
 .dot-wave { animation: dot-wave 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .dot-wave { animation: none; } }
 
+/* Toasts: glide in from the right edge with a slight overshoot, and slide back out the same way. */
+@keyframes toast-in {
+  0% { transform: translateX(calc(100% + 32px)); opacity: 0; }
+  70% { transform: translateX(-6px); opacity: 1; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes toast-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(calc(100% + 32px)); opacity: 0; }
+}
+.toast-in { animation: toast-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.toast-out { animation: toast-out 300ms ease-in both; }
+
 /* People who ask their system for less motion get instant panels instead of slides. */
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }

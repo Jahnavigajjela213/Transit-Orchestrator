@@ -4,6 +4,7 @@ import { AlertTriangle, Check, UserCheck, Wrench, X } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
+import { STEP_ICON } from "../lib/stepIcons";
 import { useCrumbs } from "../lib/topbar";
 import { ago, dayTime, kindLabel, roleName, seconds, sentence, time, words } from "../lib/format";
 import type { Approval, Delegation, Step, WorkflowDetail as WD } from "../lib/types";
@@ -129,6 +130,7 @@ function Fact({ label, value, last = false }: { label: string; value: string; la
 
 function Station({ s, i, steps, selected, onPick }: { s: Step; i: number; steps: Step[]; selected: boolean; onPick: () => void }) {
   const n = i + 1;
+  const Icon = STEP_ICON[s.key] ?? Check;
   const done = ["done", "recommended", "shadowed", "compensated"].includes(s.status);
   const red = s.status === "escalated" || s.status === "failed";
   const now = ["awaiting_approval", "active", "waiting"].includes(s.status) || red;
@@ -141,9 +143,9 @@ function Station({ s, i, steps, selected, onPick }: { s: Step; i: number; steps:
   return (
     <li className="relative flex flex-col items-center text-center">
       {i < steps.length - 1 && <span aria-hidden className={`absolute left-1/2 top-[15px] h-[3px] w-full ${lineOn ? "bg-route" : "bg-rule"}`} />}
-      <button type="button" onClick={onPick} aria-label={`${s.label}: see its agents`} aria-pressed={selected}
+      <button type="button" onClick={onPick} aria-label={`Step ${n}, ${s.label}: see its agents`} aria-pressed={selected}
         className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${dot} ${selected ? "shadow-[0_0_0_5px_rgba(11,110,105,0.2)]" : ""}`}>
-        {n}
+        <Icon className="h-4 w-4" aria-hidden />
       </button>
       <span className={`mt-2 text-[12.5px] font-semibold ${labelTone}`}>{s.label}</span>
       <span className="mt-0.5 text-[11px] text-ink-faint">
