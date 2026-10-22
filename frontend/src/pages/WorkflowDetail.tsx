@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { AlertTriangle, Bell, Check, CheckCircle2, Radar, SearchCheck, Shuffle, Truck, UserCheck, Wrench, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, UserCheck, Wrench, X } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
@@ -128,14 +128,7 @@ function Fact({ label, value, last = false }: { label: string; value: string; la
   );
 }
 
-const STEP_ICON: Record<string, typeof Wrench> = {
-  detect: Radar, assess: SearchCheck, open_work_order: Wrench, pull_vehicle: Truck,
-  reassign_runs: Shuffle, notify_riders: Bell, return_to_service: CheckCircle2,
-};
-
 function Station({ s, i, steps, selected, onPick }: { s: Step; i: number; steps: Step[]; selected: boolean; onPick: () => void }) {
-  <!--   const n = i + 1;
-  const Icon = STEP_ICON[s.key] ?? Check; -->
   const Icon = STEP_ICON[s.key] ?? CheckCircle2;
   const done = ["done", "recommended", "shadowed", "compensated"].includes(s.status);
   const red = s.status === "escalated" || s.status === "failed";
@@ -149,9 +142,6 @@ function Station({ s, i, steps, selected, onPick }: { s: Step; i: number; steps:
   return (
     <li className="relative flex flex-col items-center text-center">
       {i < steps.length - 1 && <span aria-hidden className={`absolute left-1/2 top-[15px] h-[3px] w-full ${lineOn ? "bg-route" : "bg-rule"}`} />}
- <!--       <button type="button" onClick={onPick} aria-label={`Step ${n}, ${s.label}: see its agents`} aria-pressed={selected}
-        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${dot} ${selected ? "shadow-[0_0_0_5px_rgba(11,110,105,0.2)]" : ""}`}> -->
-
       <button type="button" onClick={onPick} aria-label={`${s.label}: see its agents`} aria-pressed={selected}
         className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full ${dot} ${selected ? "shadow-[0_0_0_5px_rgba(11,110,105,0.2)]" : ""}`}>
         <Icon className="h-4 w-4" aria-hidden />
