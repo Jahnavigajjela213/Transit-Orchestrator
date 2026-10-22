@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
 import { dayTime, easternNow, sentence, toLocalInput } from "../lib/format";
 import type { ShadowRec } from "../lib/types";
+import { DateTimeInput } from "../components/DateTimeInput";
 import { useToast } from "../components/Toast";
 import { Empty, ErrorNote, Loading, PageHeader, SeverityTag, VehicleId } from "../components/ui";
 import { StatTile } from "../components/dashboard/DashboardShell";
@@ -80,14 +81,14 @@ function ByHandForm({ r, onDone }: { r: ShadowRec; onDone: () => void }) {
             <select className="input" value={priority} onChange={(e) => setPriority(e.target.value)}>
               {["critical", "high", "medium", "low"].map((p) => <option key={p} value={p}>{sentence(p)}{p === x.priority ? " (agent)" : ""}</option>)}
             </select></label>
-          <label><span className="label">Shop from</span><input type="datetime-local" className="input" value={shopStart} onChange={(e) => setShopStart(e.target.value)} /></label>
-          <label><span className="label">Shop until</span><input type="datetime-local" className="input" value={shopEnd} onChange={(e) => setShopEnd(e.target.value)} /></label>
+          <label><span className="label">Shop from</span><DateTimeInput value={shopStart} onChange={(v) => setShopStart(v)} /></label>
+          <label><span className="label">Shop until</span><DateTimeInput value={shopEnd} onChange={(v) => setShopEnd(v)} /></label>
         </div>
       )}
       {r.step === "pull_vehicle" && (
         <div className="grid gap-3 sm:grid-cols-2">
-          <label><span className="label">Out of service from</span><input type="datetime-local" className="input" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-          <label><span className="label">Until</span><input type="datetime-local" className="input" value={until} onChange={(e) => setUntil(e.target.value)} /></label>
+          <label><span className="label">Out of service from</span><DateTimeInput value={from} onChange={(v) => setFrom(v)} /></label>
+          <label><span className="label">Until</span><DateTimeInput value={until} onChange={(v) => setUntil(v)} /></label>
         </div>
       )}
       {r.step === "reassign_runs" && (plan.length === 0 ? <p className="text-xs text-ink-soft">The agent found no cover to compare against.</p> : !opts ? <Loading /> : (

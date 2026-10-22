@@ -6,6 +6,7 @@ import { dayTime, modeName, roleName, sentence, time, toLocalInput, ago } from "
 import type { Approval, Assignment, Step } from "../lib/types";
 import AgentFlow from "./AgentFlow";
 import { Json, KeyVal, SeverityTag, StatusBadge, Tag, VehicleId } from "./ui";
+import { DateTimeInput } from "./DateTimeInput";
 import { useToast } from "./Toast";
 
 const verb: Record<string, string> = { approve: "Approved", reject: "Rejected", override: "Changed and approved", acknowledge: "Acknowledged" };
@@ -178,10 +179,10 @@ export function StepBody({ item, editing, override, setOverride }: {
             </select>
           </label>
           <label><span className="label">Shop start</span>
-            <input type="datetime-local" className="input" value={override.shop_start} onChange={(e) => setOverride({ ...override, shop_start: e.target.value })} />
+            <DateTimeInput value={override.shop_start} onChange={(v) => setOverride({ ...override, shop_start: v })} />
           </label>
           <label><span className="label">Shop end</span>
-            <input type="datetime-local" className="input" value={override.shop_end} onChange={(e) => setOverride({ ...override, shop_end: e.target.value })} />
+            <DateTimeInput value={override.shop_end} onChange={(v) => setOverride({ ...override, shop_end: v })} />
           </label>
           <p className="text-xs text-ink-soft sm:col-span-3">Changing the shop window also changes when the vehicle is out of service, so the agent recalculates which runs need cover.</p>
         </div>
@@ -203,9 +204,9 @@ export function StepBody({ item, editing, override, setOverride }: {
         {editing ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <label><span className="label">Unavailable from</span>
-              <input type="datetime-local" className="input" value={override.from} onChange={(e) => setOverride({ ...override, from: e.target.value })} /></label>
+              <DateTimeInput value={override.from} onChange={(v) => setOverride({ ...override, from: v })} /></label>
             <label><span className="label">Until</span>
-              <input type="datetime-local" className="input" value={override.until} onChange={(e) => setOverride({ ...override, until: e.target.value })} /></label>
+              <DateTimeInput value={override.until} onChange={(v) => setOverride({ ...override, until: v })} /></label>
           </div>
         ) : (
           <KeyVal dense items={[["Unavailable", `${dayTime(r.from)} to ${dayTime(r.until)}`],
