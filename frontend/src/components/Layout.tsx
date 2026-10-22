@@ -35,7 +35,7 @@ export default function Layout() {
   const [crumbs, setCrumbs] = useState<Crumb[] | null>(null);
   const page = visibleGroups.flat().find((it) => (it.to === "/" ? pathname === "/" : pathname.startsWith(it.to)));
   // Screens that fit the window from tablet width up: the page stays put and their content scrolls inside itself.
-  const fit = ["/work-orders", "/workflows", "/"].includes(pathname);
+  const fit = ["/work-orders", "/workflows", "/", "/shadow", "/simulate"].includes(pathname);
 
   return (
     <div className="flex h-[100dvh] flex-col bg-paper text-ink md:flex-row">

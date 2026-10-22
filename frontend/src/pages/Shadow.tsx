@@ -169,7 +169,7 @@ export default function Shadow() {
       <PageHeader title="Shadow mode" eyebrow={`Governance · ${dates.length ? `${dayTime(dates[0])} – ${dayTime(dates[dates.length - 1])}` : "no shadow runs yet"}`}
         intro="The agent decides silently while people work as usual; here the two are compared before any step goes live."
         actions={<>
-          <Link to="/policies" className={`pill self-end px-3 py-1.5 ${inShadow ? "bg-route-tint text-route-dark" : "bg-[#EEF1F0] text-ink-soft"}`}>
+          <Link to="/policies" className={`pill self-end px-3 py-1.5 ${inShadow ? "bg-route-tint text-route-dark" : "bg-go-tint text-go"}`}>
             {inShadow ? "Policy is in Shadow" : "Policy is Live · turn on Shadow"}
           </Link>
           {user?.role === "admin" && <button className="btn-lg h-9 bg-go px-3.5 text-[13px] font-semibold text-white hover:bg-go/90" onClick={measure}>Measure baseline</button>}
@@ -221,13 +221,14 @@ export default function Shadow() {
         </div>
       </div>
 
-      <section className="card overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 border-b border-rule px-5 py-4">
+      <section className="card flex flex-col overflow-hidden md:min-h-0 md:flex-1">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-rule px-5 py-4">
           <h2 className="flex-1 text-sm font-semibold">Comparisons</h2>
           {FILTERS.map(([v, l]) => (
             <button key={l} onClick={() => setStatus(v)} className={`h-[30px] rounded-[10px] px-3 text-xs ${status === v ? "bg-ink text-white" : "border border-rule bg-white text-ink-soft"}`}>{l}</button>
           ))}
         </div>
+        <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
         {error && <div className="p-4"><ErrorNote message={error} /></div>}
         {!data ? <Loading /> : data.length === 0 ? <Empty title="Nothing here yet">Shadow recommendations appear here as the agent runs in shadow mode.</Empty> : data.map((r) => {
           const isOpen = open === r.id;
@@ -284,6 +285,7 @@ export default function Shadow() {
             </div>
           );
         })}
+        </div>
       </section>
     </>
   );

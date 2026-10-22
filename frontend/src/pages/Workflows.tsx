@@ -8,12 +8,13 @@ import { Empty, ErrorNote, Loading } from "../components/ui";
 
 const STEPS = ["Detect", "Assess", "Open work order", "Pull vehicle", "Reassign runs", "Notify riders", "Return to service"];
 
-export type Group = "approval" | "motion" | "shop" | "done" | "issues";
+export type Group = "approval" | "motion" | "shop" | "done" | "issues" | "shadow";
 export const FILTERS: [Group | "all", string][] = [
-  ["all", "All"], ["approval", "Needs approval"], ["motion", "In motion"], ["shop", "In the shop"], ["done", "Completed"], ["issues", "With issues"],
+  ["all", "All"], ["approval", "Needs approval"], ["motion", "In motion"], ["shop", "In the shop"], ["done", "Completed"], ["issues", "With issues"], ["shadow", "Shadow run"],
 ];
 export const groupOf = (w: Workflow): Group =>
-  w.status === "awaiting_approval" ? "approval"
+  w.status === "shadow" ? "shadow"
+    : w.status === "awaiting_approval" ? "approval"
     : w.status === "awaiting_event" ? "shop"
     : w.status === "completed" ? "done"
     : ["completed_with_issues", "compensated", "failed", "rejected"].includes(w.status) ? "issues"
@@ -25,6 +26,7 @@ export const STATUS: Record<Group, [string, string]> = {
   shop: ["In the shop", "bg-shop-tint text-shop"],
   done: ["Completed", "bg-go-tint text-go"],
   issues: ["With issues", "bg-stop-tint text-stop"],
+  shadow: ["Shadow run", "bg-[#EEF1F0] text-ink-soft"],
 };
 const SEV: Record<string, string> = { critical: "text-stop", high: "text-signal-ink", medium: "text-route-dark", low: "text-ink-soft" };
 
@@ -38,11 +40,16 @@ export function currentStep(w: Workflow): number {
 }
 export const escalated = (w: Workflow) => w.steps.some((s) => s.status === "escalated" || s.status === "failed");
 
+// "Active" has no chip of its own: it's the dashboard's "running or awaiting action" count - every group except the
+// three resting states (Completed, With issues, Shadow run).
+const ACTIVE_GROUPS: Group[] = ["approval", "motion", "shop"];
+
 export default function Workflows() {
   const [params] = useSearchParams();
-  // A dashboard KPI can land here pre-filtered, e.g. /workflows?status=issues.
-  const [filter, setFilter] = useState<Group | "all">(() => {
+  // A dashboard KPI can land here pre-filtered, e.g. /workflows?status=issues or /workflows?status=active.
+  const [filter, setFilter] = useState<Group | "all" | "active">(() => {
     const s = params.get("status");
+    if (s === "active") return "active";
     return FILTERS.some(([key]) => key === s) ? (s as Group | "all") : "all";
   });
   const [q, setQ] = useState("");
@@ -55,7 +62,11 @@ export default function Workflows() {
   }, [data]);
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return (data || []).filter((w) => (filter === "all" || groupOf(w) === filter) && (!needle || `${w.vehicle_label} ${w.title}`.toLowerCase().includes(needle)));
+    return (data || []).filter((w) => {
+      const g = groupOf(w);
+      const matches = filter === "all" ? true : filter === "active" ? ACTIVE_GROUPS.includes(g) : g === filter;
+      return matches && (!needle || `${w.vehicle_label} ${w.title}`.toLowerCase().includes(needle));
+    });
   }, [data, filter, q]);
 
   return (
@@ -121,7 +132,7 @@ function ListView({ rows }: { rows: Workflow[] }) {
             <span className="col-span-3 flex gap-[3px] lg:col-span-1" aria-label={`Step ${Math.min(step, 7)} of 7`}>
               {STEPS.map((s, i) => {
                 const n = i + 1;
-                const bg = n < step ? "bg-route" : n === step ? (esc ? "bg-stop" : g === "approval" ? "bg-signal" : "bg-[#5FB3AA]") : "bg-rule";
+                const bg = n < step ? "bg-route" : n === step ? (esc || g === "issues" ? "bg-stop" : g === "approval" ? "bg-signal" : g === "shop" ? "bg-shop" : "bg-[#5FB3AA]") : "bg-rule";
                 return <span key={s} title={s} className={`h-1.5 flex-1 rounded-[3px] ${bg}`} />;
               })}
             </span>

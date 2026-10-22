@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUp, Sparkles } from "lucide-react";
+import { ArrowUp, Sparkles, X } from "lucide-react";
 import { api } from "../lib/api";
 import { sentence } from "../lib/format";
 import type { Source } from "./Sources";
@@ -16,7 +16,7 @@ const threads = new Map<string, Turn[]>();
  * The assistant, inside the Focus Queue's context drawer. Scoped to the decision in focus by default (it searches only
  * that orchestration's audit records), or to the whole agency. Answers cite the audit records they were drawn from.
  */
-export default function AskPanel({ workflowId, vehicle, agency }: { workflowId: string; vehicle: string | null; agency?: string }) {
+export default function AskPanel({ workflowId, vehicle, agency, onClose }: { workflowId: string; vehicle: string | null; agency?: string; onClose?: () => void }) {
   const [scope, setScope] = useState<Scope>("wf");
   const key = scope === "wf" ? `wf:${workflowId}` : "all";
   const [turns, setTurns] = useState<Turn[]>(() => threads.get(key) ?? []);
@@ -55,6 +55,7 @@ export default function AskPanel({ workflowId, vehicle, agency }: { workflowId: 
         <div className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-route-tint text-route"><Sparkles className="h-4 w-4" aria-hidden /></span>
           <h2 className="flex-1 text-[15px] font-semibold">Ask the assistant</h2>
+          {onClose && <button type="button" onClick={onClose} aria-label="Close" className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-[#F1F4F3] text-ink-soft"><X className="h-4 w-4" /></button>}
         </div>
         <div role="radiogroup" aria-label="Scope" className="mt-3 flex flex-wrap gap-1.5">
           {([["wf", `This orchestration · ${vehicle ?? ""}`], ["all", `All of ${agency ?? "the agency"}`]] as [Scope, string][]).map(([k, label]) => (

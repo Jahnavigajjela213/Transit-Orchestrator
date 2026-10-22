@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, MoreVertical, Sparkles, X } from "lucide-react";
 import { STEP_ICON } from "../lib/stepIcons";
@@ -46,7 +46,8 @@ export default function Attention() {
     const k = params.get("kind");
     return k === "escalation" || k === "approval" ? k : "all";
   });
-  const [picked, setPickedRaw] = useState<string | null>(null);
+  // A dashboard "Review" button can also land here on one specific decision, e.g. /attention?id=apr_123.
+  const [picked, setPickedRaw] = useState<string | null>(() => params.get("id"));
   // After a decision the page stays on that vehicle's orchestration instead of jumping to another case: its next step
   // shows here if it needs a person, otherwise where it now stands, until the user moves on.
   const [follow, setFollow] = useState<{ workflowId: string; vehicle: string | null; did: string; decided: string } | null>(null);
@@ -56,7 +57,12 @@ export default function Attention() {
   const [drawer, setDrawer] = useState<DrawerKey | null>(null);
   const [drawerStep, setDrawerStep] = useState<string | null>(null);
   // The queue and the right-hand drawer take turns: opening one collapses the other, so the decision keeps its room.
-  useEffect(() => { if (drawer) setQueueOpen(false); }, [drawer]);
+  const prevDrawer = useRef<DrawerKey | null>(null);
+  useEffect(() => {
+    if (drawer) setQueueOpen(false);
+    else if (prevDrawer.current) setQueueOpen(true);  // the drawer just closed: give the queue its room back
+    prevDrawer.current = drawer;
+  }, [drawer]);
   useEffect(() => { if (queueOpen) setDrawer(null); }, [queueOpen]);
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState(false);
@@ -297,7 +303,7 @@ export default function Attention() {
 
               <ContextDrawer open={drawer} setOpen={(k) => { setDrawer(k); if (k !== "agents") setDrawerStep(null); }} detail={detail ?? null}
                 stepKey={drawerStep ?? current.step} cat={cat}
-                ask={<AskPanel key={current.workflow_id} workflowId={current.workflow_id} vehicle={current.vehicle_label} agency={user?.tenant_name} />} />
+                ask={<AskPanel key={current.workflow_id} workflowId={current.workflow_id} vehicle={current.vehicle_label} agency={user?.tenant_name} onClose={() => setDrawer(null)} />} />
             </div>
 
             {/* ------------------------------------------------------------ decision bar */}
@@ -350,10 +356,11 @@ function StepNode({ step, n, last, travelled, agents, onAgents }: {
   const red = s === "escalated" || s === "failed";
   const done = s === "done";
   const dot = done ? "bg-route text-white"
-    : s === "awaiting_approval" ? "bg-signal text-white shadow-[0_0_0_6px_#FDF1DC]"
-    : red ? "bg-stop text-white shadow-[0_0_0_6px_#FDECEA]"
+    : s === "awaiting_approval" ? "bg-signal text-white shadow-[0_0_0_6px_#FDF1DC] station-live"
+    : red ? "bg-stop text-white shadow-[0_0_0_6px_#FDECEA] station-live"
     : s === "skipped" || s === "not_run" ? "border-2 border-dashed border-[#C9D1CE] bg-white text-ink-faint"
-    : s === "active" || s === "waiting" ? "border-2 border-route bg-white text-route"
+    : s === "waiting" ? "bg-shop text-white shadow-[0_0_0_6px_#EEF2FF] station-live"
+    : s === "active" ? "border-2 border-route bg-white text-route station-live"
     : "border-2 border-[#C9D1CE] bg-rule-soft text-ink-faint";
   const state = s === "awaiting_approval" ? "Your decision" : s === "escalated" ? "Raised with you" : s === "waiting" ? "Waiting on the shop"
     : s === "pending" ? "Not yet" : s === "not_run" ? "Not reached" : sentence(s);
@@ -363,7 +370,7 @@ function StepNode({ step, n, last, travelled, agents, onAgents }: {
       <span className={`relative z-10 flex h-[30px] w-[30px] items-center justify-center rounded-full ${dot}`} aria-label={`Step ${n}: ${step.label}`}>
         <Icon className="h-4 w-4" aria-hidden />
       </span>
-      <span className={`mt-2.5 text-[12.5px] font-semibold ${s === "awaiting_approval" ? "text-signal-ink" : red ? "text-stop" : done ? "text-ink" : "text-ink-faint"}`}>{step.label}</span>
+      <span className={`mt-2.5 text-[12.5px] font-semibold ${s === "awaiting_approval" ? "text-signal-ink" : red ? "text-stop" : s === "waiting" ? "text-shop" : done ? "text-ink" : "text-ink-faint"}`}>{step.label}</span>
       <span className="mt-1.5 rounded-full bg-[#EEF1F0] px-2 py-0.5 text-[11px] font-semibold text-ink-soft">{state}</span>
       {agents && (
         <button type="button" onClick={onAgents} className="mt-1.5 rounded-full px-2 py-0.5 text-[10.5px] text-ink-soft hover:bg-route-tint hover:text-route-dark"

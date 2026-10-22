@@ -25,7 +25,7 @@ export default function Simulate() {
       <PageHeader title="Simulate" eyebrow="Testing playground"
         badge={<span className="rounded-full border border-signal-line bg-signal-tint px-2.5 py-[3px] text-[11px] font-semibold tracking-normal text-signal-ink">Sandbox</span>}
         intro="Everything here goes through the same event backbone and product APIs a real integration would use." />
-      <div role="tablist" aria-label="Playground" className="flex gap-6 overflow-x-auto border-b border-rule">
+      <div role="tablist" aria-label="Playground" className="flex shrink-0 gap-6 overflow-x-auto border-b border-rule">
         {TABS.map((t) => (
           <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => pick(t.key)}
             className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-3 pt-2 text-sm font-medium ${tab === t.key ? "border-route text-ink" : "border-transparent text-ink-soft hover:text-ink"}`}>
@@ -33,10 +33,12 @@ export default function Simulate() {
           </button>
         ))}
       </div>
-      {tab === "fault" && <FaultForm />}
-      {tab === "scheduling" && <Schedule embedded />}
-      {tab === "riders" && <Riders embedded />}
-      {tab === "controls" && <DemoControls />}
+      <div className="flex flex-col gap-3.5 md:min-h-0 md:flex-1 md:overflow-y-auto">
+        {tab === "fault" && <FaultForm />}
+        {tab === "scheduling" && <Schedule embedded />}
+        {tab === "riders" && <Riders embedded />}
+        {tab === "controls" && <DemoControls />}
+      </div>
     </>
   );
 }

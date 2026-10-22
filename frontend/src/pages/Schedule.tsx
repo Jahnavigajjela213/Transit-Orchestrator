@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
 import { useToast } from "../components/Toast";
 import { easternNow, time } from "../lib/format";
-import { ErrorNote, Loading, PageHeader, VehicleId, Empty } from "../components/ui";
+import { Dropdown, ErrorNote, Loading, PageHeader, VehicleId, Empty } from "../components/ui";
 import { Pager, usePaged } from "../components/Pager";
 
 interface Sched {
@@ -30,16 +30,16 @@ function ReassignForm({ run, onDone }: { run: Sched["runs"][number]; onDone: () 
   if (!vehicles || !drivers) return <div className="p-3"><Loading /></div>;
   const vSel = v || vehicles.find((x) => x.label === run.vehicle_label)?.vehicle_code || "";
   const dSel = d || drivers.find((x) => x.name === run.driver_name)?.driver_code || "";
+  const vehicleItems = vehicles.map((x) => ({
+    id: x.vehicle_code, label: `${x.label}, ${x.vehicle_type}${x.wheelchair_positions ? " ♿" : ""}${x.status !== "available" ? " (out of service)" : ""}`,
+  }));
+  const driverItems = drivers.map((x) => ({ id: x.driver_code, label: x.name }));
   return (
     <div className="flex flex-wrap items-end gap-2 p-3 text-sm">
       <label><span className="label">Vehicle</span>
-        <select className="input w-56" value={vSel} onChange={(e) => setV(e.target.value)}>
-          {vehicles.map((x) => <option key={x.vehicle_code} value={x.vehicle_code}>{x.label}, {x.vehicle_type}{x.wheelchair_positions ? " ♿" : ""}{x.status !== "available" ? " (out of service)" : ""}</option>)}
-        </select></label>
+        <Dropdown value={vSel} items={vehicleItems} onChange={setV} className="w-56" /></label>
       <label><span className="label">Driver</span>
-        <select className="input w-56" value={dSel} onChange={(e) => setD(e.target.value)}>
-          {drivers.map((x) => <option key={x.driver_code} value={x.driver_code}>{x.name}</option>)}
-        </select></label>
+        <Dropdown value={dSel} items={driverItems} onChange={setD} className="w-56" /></label>
       <button className="btn-primary" disabled={busy || !vSel || !dSel} onClick={async () => {
         setBusy(true);
         try {
@@ -73,9 +73,9 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
   const pg = usePaged(data?.runs, [day, changed]);
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="flex flex-col gap-3.5 md:min-h-0 md:flex-1">
       {!embedded && <PageHeader title="Schedule" intro="Runs from trip management, with driver names resolved from workforce. Runs the agent moved to a spare are marked." />}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
         <div role="tablist" aria-label="Service day" className="flex gap-0.5 rounded-[10px] border border-rule bg-white p-[3px]">
           {days.map((d) => (
             <button key={iso(d)} role="tab" aria-selected={day === iso(d)} onClick={() => setDay(iso(d))}
@@ -89,10 +89,10 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
           <input type="checkbox" checked={changed} onChange={(e) => setChanged(e.target.checked)} className="accent-route" /> Only reassigned runs
         </label>
       </div>
-      {error && <ErrorNote message={error} />}
-      {!data ? <div className="card"><Loading /></div> : data.runs.length === 0 ? <div className="card"><Empty title="No runs match" /></div> : (
-        <>
-        <section className={`card overflow-x-auto ${pg.big ? "max-h-[min(640px,calc(100vh-300px))] overflow-y-auto" : ""}`}>
+      {error && <div className="shrink-0"><ErrorNote message={error} /></div>}
+      {!data ? <div className="card shrink-0"><Loading /></div> : data.runs.length === 0 ? <div className="card shrink-0"><Empty title="No runs match" /></div> : (
+        <div className="flex flex-col gap-3.5 md:min-h-0 md:flex-1">
+        <section className="card overflow-x-auto md:min-h-0 md:flex-1 md:overflow-y-auto">
           <div className={`${COLS} eyebrow sticky top-0 z-10 border-b border-rule bg-panel px-[18px] py-3`}>
             <span>Run</span><span>Time</span><span>Vehicle</span><span>Driver</span><span>Riders</span><span>Status</span><span />
           </div>
@@ -113,7 +113,9 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
                   </span>
                   <span className="text-right">
                     {canAssign && r.status !== "completed" && (
-                      <button className="h-7 rounded-[10px] border border-rule bg-white px-2.5 text-[11.5px] text-ink-soft" onClick={() => setEditing(editing === r.run_id ? null : r.run_id)}>
+                      <button
+                        className={`h-7 rounded-[10px] px-2.5 text-[11.5px] font-semibold ${editing === r.run_id ? "bg-go-tint text-go hover:bg-go-tint/70" : "bg-signal text-white hover:bg-signal/90"}`}
+                        onClick={() => setEditing(editing === r.run_id ? null : r.run_id)}>
                         {editing === r.run_id ? "Close" : "Reassign"}
                       </button>
                     )}
@@ -124,8 +126,8 @@ export default function Schedule({ embedded = false }: { embedded?: boolean }) {
             );
           })}
         </section>
-        <Pager {...pg} />
-        </>
+        <div className="shrink-0"><Pager {...pg} /></div>
+        </div>
       )}
     </div>
   );

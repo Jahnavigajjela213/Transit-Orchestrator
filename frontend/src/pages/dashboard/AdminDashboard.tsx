@@ -32,8 +32,9 @@ export default function AdminDashboard() {
   const since = Date.now() - DAYS * 86400000;
   const inPeriod = useMemo(() => liveWfs.filter((w) => new Date(w.started_at).getTime() >= since), [liveWfs, since]);
 
-  const activeCount = liveWfs.filter((w) => groupOf(w) === "motion").length;
-  const failedCount = inPeriod.filter((w) => w.status === "failed").length;
+  // Anything still live in its 7-step journey: not finished (Completed), not failed (With issues), not shadow-only.
+  const activeCount = liveWfs.filter((w) => !["done", "issues"].includes(groupOf(w))).length;
+  const issuesCount = inPeriod.filter((w) => groupOf(w) === "issues").length;
 
   // One row per Vestige defect; a vehicle can carry more than one, each counted once.
   const criticalDefects = useMemo(() => {
@@ -45,7 +46,10 @@ export default function AdminDashboard() {
     return out;
   }, [fleet]);
 
-  const chartGroups = (["approval", "motion", "shop", "done", "issues"] as Group[]).map((g) => ({ g, label: STATUS[g][0], n: inPeriod.filter((w) => groupOf(w) === g).length }));
+  const chartGroups = (["approval", "motion", "shop", "done", "issues", "shadow"] as Group[]).map((g) => ({
+    g, label: STATUS[g][0],
+    n: g === "shadow" ? (wfs ?? []).filter((w) => w.status === "shadow" && new Date(w.started_at).getTime() >= since).length : inPeriod.filter((w) => groupOf(w) === g).length,
+  }));
   const chartMax = Math.max(1, ...chartGroups.map((c) => c.n));
 
   const alertsLoaded = !!wfs && !!fleet && !!queueRaw && !!governanceAudit;
@@ -62,7 +66,7 @@ export default function AdminDashboard() {
     criticalDefects.forEach((d) => out.push({
       id: `def-${d.id}`, severity: "critical", title: "Critical vehicle fault",
       ref: d.vehicle, description: `${sentence(d.category)}${d.out_of_service ? ", vehicle out of service" : ""}`, at: d.created_at,
-      onClick: () => nav("/work-orders?priority=critical"),
+      onClick: () => nav("/work-orders?priority=critical&active=1"),
     }));
     (governanceAudit ?? []).filter((r) => r.record_type === "policy_change" || r.human_action === "override" || r.outcome === "overridden")
       .forEach((r) => out.push({
@@ -77,13 +81,13 @@ export default function AdminDashboard() {
     <div className="space-y-5 md:flex md:min-h-0 md:flex-1 md:flex-col md:space-y-0 md:gap-5 md:overflow-hidden">
       <div className="shrink-0">
         <StatTileRow>
-          <StatTile label="Active orchestrations" icon={GitBranch} value={wfs ? activeCount : "—"} sub="Currently running" onClick={() => nav("/workflows?status=motion")} />
+          <StatTile label="Active orchestrations" icon={GitBranch} value={wfs ? activeCount : "—"} sub="Currently running" onClick={() => nav("/workflows?status=active")} />
           <StatTile label="Pending approvals" icon={Bell} value={queueRaw ? all.length : "—"} sub={`Awaiting authorized review${escalations ? ` · ${escalations} manual` : ""}`}
             tone={all.length ? "warn" : "good"} onClick={() => nav("/attention")} />
-          <StatTile label="Failed workflows" icon={XCircle} value={wfs ? failedCount : "—"} sub={`Require investigation · ${DAYS}d`}
-            tone={failedCount ? "bad" : "good"} onClick={() => nav("/workflows?status=issues")} />
+          <StatTile label="With issues" icon={XCircle} value={wfs ? issuesCount : "—"} sub={`Require investigation · ${DAYS}d`}
+            tone={issuesCount ? "bad" : "good"} onClick={() => nav("/workflows?status=issues")} />
           <StatTile label="Critical vehicle faults" icon={ShieldAlert} value={fleet ? criticalDefects.length : "—"} sub="Require safety assessment"
-            tone={criticalDefects.length ? "bad" : "good"} onClick={() => nav("/work-orders?priority=critical")} />
+            tone={criticalDefects.length ? "bad" : "good"} onClick={() => nav("/work-orders?priority=critical&active=1")} />
         </StatTileRow>
       </div>
 
@@ -117,7 +121,7 @@ export default function AdminDashboard() {
 
         <section className="card flex h-full flex-col p-4">
           <h2 className="text-[15px] font-semibold">Orchestration health</h2>
-          {!wfs ? <div className="mt-2"><Loading /></div> : inPeriod.length === 0 ? <div className="mt-2 flex-1"><Empty title="No orchestrations in this period" /></div> : (
+          {!wfs ? <div className="mt-2"><Loading /></div> : chartGroups.every((c) => c.n === 0) ? <div className="mt-2 flex-1"><Empty title="No orchestrations in this period" /></div> : (
             <div className="mt-3 flex-1 space-y-2.5">
               {chartGroups.map((c) => (
                 <button key={c.g} type="button" onClick={() => nav(`/workflows?status=${c.g}`)} aria-label={`${c.label}: ${c.n}. Open in Orchestrations.`}

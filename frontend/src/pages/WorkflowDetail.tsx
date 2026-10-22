@@ -132,18 +132,19 @@ function Station({ s, i, steps, selected, onPick }: { s: Step; i: number; steps:
   const Icon = STEP_ICON[s.key] ?? CheckCircle2;
   const done = ["done", "recommended", "shadowed", "compensated"].includes(s.status);
   const red = s.status === "escalated" || s.status === "failed";
+  const shop = s.status === "waiting";
   const now = ["awaiting_approval", "active", "waiting"].includes(s.status) || red;
   const lineOn = i < steps.length - 1 && !["pending", "not_run"].includes(steps[i + 1].status);
   const dot = done ? "bg-route text-white"
-    : red ? "bg-stop text-white" : now ? "bg-signal text-white"
+    : red ? "bg-stop text-white" : shop ? "bg-shop text-white" : now ? "bg-signal text-white"
     : s.status === "skipped" ? "border-2 border-dashed border-[#C9D1CE] bg-white text-ink-faint"
     : "border-2 border-[#C9D1CE] bg-white text-ink-faint";
-  const labelTone = red ? "text-stop" : now ? "text-signal-ink" : done ? "text-ink" : "text-ink-faint";
+  const labelTone = red ? "text-stop" : shop ? "text-shop" : now ? "text-signal-ink" : done ? "text-ink" : "text-ink-faint";
   return (
     <li className="relative flex flex-col items-center text-center">
       {i < steps.length - 1 && <span aria-hidden className={`absolute left-1/2 top-[15px] h-[3px] w-full ${lineOn ? "bg-route" : "bg-rule"}`} />}
-      <button type="button" onClick={onPick} aria-label={`${s.label}: see its agents`} aria-pressed={selected}
-        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full ${dot} ${selected ? "shadow-[0_0_0_5px_rgba(11,110,105,0.2)]" : ""}`}>
+      <button type="button" onClick={onPick} aria-label={`${s.label}: see its agents${now ? " (in progress)" : ""}`} aria-pressed={selected}
+        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full ${dot} ${now ? "station-live" : ""} ${selected ? "shadow-[0_0_0_5px_rgba(11,110,105,0.2)]" : ""}`}>
         <Icon className="h-4 w-4" aria-hidden />
       </button>
       <span className={`mt-2 text-[12.5px] font-semibold ${labelTone}`}>{s.label}</span>
@@ -175,8 +176,11 @@ function AgentPanel({ step, index, cat, workflowType, delegations, onClose }: {
             <div className="font-semibold">{ag.name} <span className="text-xs font-normal text-ink-faint">· {ag.role}</span></div>
             <div className="mt-1 text-[13px]">{pa.task}</div>
             <div className="mt-1.5 text-[11.5px] text-ink-soft">{ag.product.split(" (")[0]} · <span className="font-agent text-ink">{ag.data.join(", ")}</span></div>
-            <div className={`mt-1.5 text-[11.5px] ${failed ? "text-stop" : ran.length ? "text-go" : "text-ink-faint"}`}>
-              {failed ? `Failed: ${failed.error ?? ""}` : ran.length ? `✓ Ran ${ran.length} task${ran.length === 1 ? "" : "s"} · ${ran.reduce((n, d) => n + d.duration_ms, 0)} ms` : "Not yet"}
+            <div className={`mt-1.5 text-[11.5px] ${failed ? "text-stop" : ran.length ? "text-go" : "text-ink-faint"}`}
+              title={ran.length && step.status === "pending" ? "Looked ahead while assessing, to prepare this step's proposal before it actually runs." : undefined}>
+              {failed ? `Failed: ${failed.error ?? ""}`
+                : ran.length ? `✓ ${step.status === "pending" ? "Consulted early" : "Ran"} ${ran.length} task${ran.length === 1 ? "" : "s"} · ${ran.reduce((n, d) => n + d.duration_ms, 0)} ms`
+                : "Not yet"}
             </div>
           </div>
         );

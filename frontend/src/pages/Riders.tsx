@@ -15,13 +15,13 @@ export default function Riders({ embedded = false }: { embedded?: boolean }) {
   const { data, error } = useData<N[]>(`/products/rider-comms/notifications${wf ? `?workflow_id=${wf}` : ""}`, [wf]);
   const pg = usePaged(data, [wf]);
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-2.5 md:min-h-0 md:flex-1">
       {!embedded && <PageHeader title="Rider messages" intro="Messages sent through rider communications (TripShot / Passio), in each rider's language and preferred channel." />}
-      {wf && <p className="text-[13px] text-ink-soft">Showing messages for one <Link to={`/workflows/${wf}`}>orchestration</Link>. <Link to="/simulate?tab=riders">Show all</Link></p>}
-      {error && <ErrorNote message={error} />}
-      {!data ? <div className="card"><Loading /></div> : data.length === 0 ? <div className="card"><Empty title="No messages sent yet">Riders are notified when the agent reassigns their run.</Empty></div> : (
-        <>
-        <div className={`flex flex-col gap-2.5 ${pg.big ? "max-h-[min(640px,calc(100vh-300px))] overflow-y-auto pr-1" : ""}`}>
+      {wf && <p className="shrink-0 text-[13px] text-ink-soft">Showing messages for one <Link to={`/workflows/${wf}`}>orchestration</Link>. <Link to="/simulate?tab=riders">Show all</Link></p>}
+      {error && <div className="shrink-0"><ErrorNote message={error} /></div>}
+      {!data ? <div className="card shrink-0"><Loading /></div> : data.length === 0 ? <div className="card shrink-0"><Empty title="No messages sent yet">Riders are notified when the agent reassigns their run.</Empty></div> : (
+        <div className="flex flex-col gap-2.5 md:min-h-0 md:flex-1">
+        <div className="flex flex-col gap-2.5 pr-1 md:min-h-0 md:flex-1 md:overflow-y-auto">
         {pg.rows.map((n) => (
           <article key={n.id} className="card px-[18px] py-3.5">
             <div className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
@@ -36,8 +36,8 @@ export default function Riders({ embedded = false }: { embedded?: boolean }) {
           </article>
         ))}
         </div>
-        <Pager {...pg} />
-        </>
+        <div className="shrink-0"><Pager {...pg} /></div>
+        </div>
       )}
     </div>
   );

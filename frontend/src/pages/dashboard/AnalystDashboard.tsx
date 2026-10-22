@@ -1,15 +1,12 @@
 import { useMemo, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
-import { Eye, FlaskConical, GitBranch, UserCheck } from "lucide-react";
+import { Eye, GitBranch, Handshake, ShieldAlert } from "lucide-react";
 import { useData } from "../../lib/live";
 import { sentence } from "../../lib/format";
 import type { ShadowRec, Workflow } from "../../lib/types";
 import { StatTile, StatTileRow } from "../../components/dashboard/DashboardShell";
 import { CategoryBarChart, DonutChart, MultiLineChart, type Series } from "../../components/dashboard/charts";
-import { STATUS, escalated, groupOf, type Group } from "../Workflows";
+import { STATUS, groupOf, type Group } from "../Workflows";
 
-interface EvalRunRow { id: string; status: string; score_pct: number | null; started_at: string; summary?: { cases?: number } }
-interface EvalsListing { runs: EvalRunRow[] }
 interface ShadowStep { step: string; recommended: number; matched: number; differed: number }
 interface ShadowSummary { steps: ShadowStep[]; total: number }
 const STEP_LABEL: Record<string, string> = { open_work_order: "Open work order", pull_vehicle: "Pull vehicle", reassign_runs: "Reassign runs", notify_riders: "Notify riders", return_to_service: "Return to service", adjust_schedule: "Adjust schedule" };
@@ -73,11 +70,9 @@ function buckets(periodHours: number): { keys: string[]; labels: string[]; granu
 const bucketKey = (iso: string, granularity: "hour" | "day") => (granularity === "hour" ? iso.slice(0, 13) : iso.slice(0, 10));
 
 export default function AnalystDashboard() {
-  const nav = useNavigate();
   const periodHours = PERIOD_HOURS;
 
   const { data: wfs } = useData<Workflow[]>("/api/workflows?workflow_type=vehicle_health&limit=500");
-  const { data: evals } = useData<EvalsListing>("/api/evals");
   const { data: shadowRecs } = useData<ShadowRec[]>("/api/shadow?limit=500");
   const { data: shadowSummary } = useData<ShadowSummary>("/api/shadow/summary");
 
@@ -86,17 +81,13 @@ export default function AnalystDashboard() {
   const inPeriod = useMemo(() => liveWfs.filter((w) => new Date(w.started_at).getTime() >= since), [liveWfs, since]);
   const eligible = useMemo(() => inPeriod.filter((w) => TERMINAL.has(w.status)), [inPeriod]);
 
-  // ---- KPI 1: workflows evaluated - eval cases across eval runs in the period ----
-  const evalRunsInPeriod = useMemo(() => (evals?.runs ?? []).filter((r) => new Date(r.started_at).getTime() >= since), [evals, since]);
-  const evalCases = evalRunsInPeriod.reduce((n, r) => n + (r.summary?.cases ?? 0), 0);
+  // ---- KPI 1: critical faults detected in the period -------------------------
+  const criticalCount = inPeriod.filter((w) => w.severity === "critical").length;
 
   // ---- KPI 2: workflow success rate ------------------------------------------
   const successCount = eligible.filter((w) => w.status === "completed").length;
   const successRate = eligible.length ? (successCount / eligible.length) * 100 : null;
 
-  // ---- KPI 3: human intervention rate (escalated or rejected) ----------------
-  const interventions = eligible.filter((w) => escalated(w) || w.status === "rejected").length;
-  const interventionRate = eligible.length ? (interventions / eligible.length) * 100 : null;
 
   // ---- KPI 4: shadow evaluations - decided comparisons in the period ---------
   const shadowInPeriod = useMemo(() => (shadowRecs ?? []).filter((r) => new Date(r.recommended_at).getTime() >= since), [shadowRecs, since]);
@@ -117,8 +108,11 @@ export default function AnalystDashboard() {
   }, [eligible, bKeys, granularity]);
 
   // ---- Chart 2: current status distribution (point-in-time, not period-scoped) ----
-  const chartGroups = (["approval", "motion", "shop", "done", "issues"] as Group[]).map((g) => ({ g, label: STATUS[g][0], n: liveWfs.filter((w) => groupOf(w) === g).length }));
-  const donutColors: Record<Group, string> = { approval: "#E3A23C", motion: "#2F9E8F", shop: "#5B6EE8", done: "#7CB342", issues: "#D65A4E" };
+  const chartGroups = (["approval", "motion", "shop", "done", "issues", "shadow"] as Group[]).map((g) => ({
+    g, label: STATUS[g][0],
+    n: g === "shadow" ? (wfs ?? []).filter((w) => w.status === "shadow").length : liveWfs.filter((w) => groupOf(w) === g).length,
+  }));
+  const donutColors: Record<Group, string> = { approval: "#E3A23C", motion: "#2F9E8F", shop: "#5B6EE8", done: "#7CB342", issues: "#D65A4E", shadow: "#9AA4AB" };
 
   // ---- Chart 3a: AI recommendation vs what the person actually did, by step ----
   const shadowDecidedSteps = useMemo(() => (shadowSummary?.steps ?? []).filter((s) => s.matched + s.differed > 0), [shadowSummary]);
@@ -153,12 +147,13 @@ export default function AnalystDashboard() {
   return (
     <div className="dash-scroll space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
       <StatTileRow>
-        <StatTile label="Workflows Evaluated" icon={FlaskConical} value={evals ? evalCases : "—"} sub="Selected reporting period" onClick={() => nav("/evals")} />
+        <StatTile label="Critical Faults" icon={ShieldAlert} value={wfs ? criticalCount : "—"} sub="Selected reporting period"
+          tone={criticalCount ? "bad" : "good"} />
         <StatTile label="Workflow Success Rate" icon={GitBranch} value={successRate !== null ? `${successRate.toFixed(1)}%` : "—"} sub="Based on defined outcomes"
-          tone={successRate === null ? undefined : successRate >= 90 ? "good" : "warn"} onClick={() => nav("/workflows?status=done")} />
-        <StatTile label="Human Intervention Rate" icon={UserCheck} value={interventionRate !== null ? `${interventionRate.toFixed(1)}%` : "—"} sub="Approvals and overrides"
-          tone={interventionRate === null ? undefined : interventionRate > 20 ? "warn" : "good"} onClick={() => nav("/audit")} />
-        <StatTile label="Shadow Evaluations" icon={Eye} value={shadowRecs ? shadowCompleted : "—"} sub="Completed comparisons" onClick={() => nav("/shadow")} />
+          tone={successRate === null ? undefined : successRate >= 90 ? "good" : "warn"} />
+        <StatTile label="Agent Agreement Rate" icon={Handshake} value={agreedPct !== null ? `${agreedPct.toFixed(1)}%` : "—"} sub="vs shadow comparisons"
+          tone={agreedPct === null ? undefined : agreedPct >= 80 ? "good" : "warn"} />
+        <StatTile label="Shadow Evaluations" icon={Eye} value={shadowRecs ? shadowCompleted : "—"} sub="Completed comparisons" />
       </StatTileRow>
 
       <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, ClipboardCheck, GitBranch, ShieldAlert } from "lucide-react";
+import { ClipboardCheck, GitBranch, ShieldAlert, XCircle } from "lucide-react";
 import { useData } from "../../lib/live";
 import { useAttentionQueue } from "../../lib/queue";
 import { ago, dayTime, sentence } from "../../lib/format";
@@ -34,17 +34,7 @@ export default function DispatcherDashboard() {
   // Only what this dispatcher can actually act on - the same server-computed flag the Focus Queue itself uses.
   const decidable = useMemo(() => all.filter((a) => a.can_decide), [all]);
 
-  // One row per Vestige defect; a vehicle can carry more than one, each counted once.
-  const serviceDefects = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { id: string; vehicle: string; category: string; severity: string }[] = [];
-    (fleet ?? []).forEach((v) => (v.open_defects ?? []).forEach((d) => {
-      if (d.out_of_service && !seen.has(d.id)) { seen.add(d.id); out.push({ id: d.id, vehicle: v.label, category: d.category, severity: d.severity }); }
-    }));
-    return out;
-  }, [fleet]);
-  const escalationCount = all.filter((a) => a.kind === "escalation").length;
-  const disruptionCount = escalationCount + serviceDefects.length;
+  const issuesCount = liveWfs.filter((w) => groupOf(w) === "issues").length;
 
   const vehiclesWithDefects = useMemo(() => (fleet ?? []).filter((v) => (v.open_defects?.length ?? 0) > 0), [fleet]);
   const criticalVehicles = useMemo(() => vehiclesWithDefects.filter((v) => v.open_defects!.some((d) => d.severity === "critical")), [vehiclesWithDefects]);
@@ -59,12 +49,12 @@ export default function DispatcherDashboard() {
           <StatTile label="Pending decisions" icon={ClipboardCheck} value={queueRaw ? decidable.length : "—"} sub="Awaiting your approval"
             tone={decidable.length ? "warn" : "good"} onClick={() => nav("/attention")} />
           <StatTile label="Active orchestrations" icon={GitBranch} value={wfs ? activeWfs.length : "—"} sub="Running or awaiting action"
-            onClick={() => nav("/workflows")} />
-          <StatTile label="Service disruptions" icon={AlertTriangle} value={queueRaw && fleet ? disruptionCount : "—"} sub="Trips and vehicles affected"
-            tone={disruptionCount ? "bad" : "good"} onClick={() => nav("/attention?kind=escalation")} />
+            onClick={() => nav("/workflows?status=active")} />
+          <StatTile label="With issues" icon={XCircle} value={wfs ? issuesCount : "—"} sub="Require investigation"
+            tone={issuesCount ? "bad" : "good"} onClick={() => nav("/workflows?status=issues")} />
           <StatTile label="Vehicles requiring attention" icon={ShieldAlert} value={fleet ? vehiclesWithDefects.length : "—"}
             sub={`${criticalVehicles.length} critical`} tone={criticalVehicles.length ? "bad" : vehiclesWithDefects.length ? "warn" : "good"}
-            onClick={() => nav(criticalVehicles.length ? "/work-orders?priority=critical" : "/work-orders")} />
+            onClick={() => nav(criticalVehicles.length ? "/work-orders?priority=critical&active=1" : "/work-orders")} />
         </StatTileRow>
       </div>
 
@@ -92,7 +82,7 @@ export default function DispatcherDashboard() {
                         <span className="text-[11px] text-ink-faint" title={dayTime(a.requested_at)}>{ago(a.requested_at)}</span>
                       </div>
                     </div>
-                    <ReviewButton onClick={() => nav("/attention")} />
+                    <ReviewButton onClick={() => nav(`/attention?id=${a.id}`)} />
                   </div>
                 </li>
               ))}

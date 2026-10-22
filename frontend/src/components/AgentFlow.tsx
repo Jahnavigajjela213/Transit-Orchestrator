@@ -128,9 +128,10 @@ function StepAgents({ step, index, total, plan, agents, delegations, onClose }: 
                       </a>
                     ))}
                     {delegations && (ran.length > 0 ? (
-                      <span className={`ml-auto inline-flex items-center gap-1 text-2xs font-semibold ${failed ? "text-stop" : "text-go"}`}>
+                      <span className={`ml-auto inline-flex items-center gap-1 text-2xs font-semibold ${failed ? "text-stop" : "text-go"}`}
+                        title={step.status === "pending" ? "Looked ahead while assessing, to prepare this step's proposal before it actually runs." : undefined}>
                         {failed ? <X className="h-3 w-3" aria-hidden /> : <Check className="h-3 w-3" strokeWidth={3} aria-hidden />}
-                        {failed ? "Failed" : `Ran ${ran.length} task${ran.length === 1 ? "" : "s"}`} · {ran.reduce((n, d) => n + d.duration_ms, 0)} ms
+                        {failed ? "Failed" : `${step.status === "pending" ? "Consulted early" : "Ran"} ${ran.length} task${ran.length === 1 ? "" : "s"}`} · {ran.reduce((n, d) => n + d.duration_ms, 0)} ms
                       </span>
                     ) : <span className="ml-auto text-2xs text-ink-faint">Not run yet</span>)}
                   </div>

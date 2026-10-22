@@ -64,6 +64,11 @@
   .dash-scroll::-webkit-scrollbar { display: block; width: 10px; height: 10px; }
   .dash-scroll::-webkit-scrollbar-thumb { background-color: var(--color-ink-faint); border-radius: 9999px; border: 2px solid var(--color-paper); }
   .dash-scroll::-webkit-scrollbar-track { background: transparent; }
+  /* A table wider than its card: a visible bar makes the extra columns read as "scroll for more", not "cut off". */
+  .hscroll { scrollbar-width: thin; scrollbar-color: var(--color-ink-faint) transparent; }
+  .hscroll::-webkit-scrollbar { display: block; height: 8px; }
+  .hscroll::-webkit-scrollbar-thumb { background-color: var(--color-ink-faint); border-radius: 9999px; }
+  .hscroll::-webkit-scrollbar-track { background: transparent; }
   .dash-scroll {
     background:
       linear-gradient(var(--color-paper) 30%, rgba(244, 246, 245, 0)) center top,

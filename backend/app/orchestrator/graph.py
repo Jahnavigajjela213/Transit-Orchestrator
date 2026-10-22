@@ -13,6 +13,7 @@ people keep working in the products and the Shadow mode screen compares the two.
 Side effects that must happen exactly once per pause (approval cards, LLM
 explanations) happen in OrchestratorService, outside the graph.
 """
+import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -129,6 +130,7 @@ def _failure_update(state: WorkflowState, step: str, exc: Exception) -> dict:
 async def assess_node(state: WorkflowState) -> dict:
     await set_step(state["workflow_id"], "detect", "done", f"Received {state['trigger_type']}", "autonomous")
     await set_step(state["workflow_id"], "assess", "active", "Evaluating severity, runs at risk and spares", "autonomous")
+    await asyncio.sleep(10)  # demo-only: lets "Assessing" actually be visible before this step's fast mocked reads finish
     rules = await _rules(state)
     vid = state["vehicle_id"]
 

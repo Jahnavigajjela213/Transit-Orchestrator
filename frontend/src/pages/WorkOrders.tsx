@@ -49,11 +49,15 @@ export default function WorkOrders() {
   const [params] = useSearchParams();
   const priorityFilter = params.get("priority");
   const overdueOnly = params.get("overdue") === "1";
+  // A "requires attention" KPI (e.g. critical vehicle faults still open) counts only what's unresolved -
+  // exclude anything already closed/cancelled so the board matches that count exactly.
+  const activeOnly = params.get("active") === "1";
 
   const today = ymd(easternNow());
   const lanes = useMemo(() => {
     const rows = (data || []).map((w) => (done[w.id] && RANK[done[w.id].status] > RANK[w.status] ? done[w.id] : w))
-      .filter((w) => (!priorityFilter || w.priority === priorityFilter) && (!overdueOnly || isOverdue(w)));
+      .filter((w) => (!priorityFilter || w.priority === priorityFilter) && (!overdueOnly || isOverdue(w))
+        && (!activeOnly || (w.status !== "closed" && w.status !== "cancelled")));
     return LANES.map((l) => ({
       ...l,
       cards: rows.filter((w) => l.key === "closed"
@@ -61,7 +65,7 @@ export default function WorkOrders() {
         : w.status === l.key)
         .sort((a, b) => (RANK[a.status] === 2 ? (b.closed_at ?? "").localeCompare(a.closed_at ?? "") : b.created_at.localeCompare(a.created_at))),
     }));
-  }, [data, done, today, priorityFilter, overdueOnly]);
+  }, [data, done, today, priorityFilter, overdueOnly, activeOnly]);
 
   async function act(wo: WO, action: "start" | "close") {
     setBusy(wo.id);
@@ -75,9 +79,9 @@ export default function WorkOrders() {
   return (
     <>
       <PageHeader intro="Start work first, then close it. Closing an agent-opened work order returns the vehicle to the schedule automatically."
-        badge={(priorityFilter || overdueOnly) && (
+        badge={(priorityFilter || overdueOnly || activeOnly) && (
           <span className="pill bg-[#EEF1F0] text-ink-soft">
-            {[priorityFilter && `${sentenceCase(priorityFilter)} priority`, overdueOnly && "Overdue"].filter(Boolean).join(" · ")} only
+            {[priorityFilter && `${sentenceCase(priorityFilter)} priority`, overdueOnly && "Overdue", activeOnly && "Still open"].filter(Boolean).join(" · ")} only
             <Link to="/work-orders" className="ml-1.5 font-semibold text-route hover:underline">Clear ✕</Link>
           </span>
         )} />

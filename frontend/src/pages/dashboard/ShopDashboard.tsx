@@ -1,14 +1,14 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ban, Clock, ShieldAlert, Wrench } from "lucide-react";
+import { CheckCircle2, Clock, Timer, Wrench } from "lucide-react";
 import { useData } from "../../lib/live";
 import { useOpenWorkOrderApprovals } from "../../components/dashboard/panels";
-import { ago, dayTime, sentence } from "../../lib/format";
+import { ago, dayTime, easternNow, sentence } from "../../lib/format";
 import { api } from "../../lib/api";
 import { useToast } from "../../components/Toast";
 import type { AuditRecord, FleetRow } from "../../lib/types";
 import { Empty, ErrorNote, Loading } from "../../components/ui";
-import { OpenButton, ReviewButton, StatTile, StatTileRow, ViewAllButton } from "../../components/dashboard/DashboardShell";
+import { ReviewButton, StatTile, StatTileRow, ViewAllButton } from "../../components/dashboard/DashboardShell";
 import { RecentActivity } from "../../components/dashboard/ActivityFeed";
 import { isOverdue, type WO } from "../WorkOrders";
 
@@ -33,16 +33,24 @@ export default function ShopDashboard() {
 
   const openWos = useMemo(() => (wos ?? []).filter((w) => w.status === "open" || w.status === "in_progress"), [wos]);
   const overdueWos = useMemo(() => openWos.filter(isOverdue), [openWos]);
+  // Same vehicles the Work orders board shows (open or in-progress repair), not the schedule's own "blocked right
+  // now" count - the two can briefly disagree (a work order can exist before its shop window actually starts).
+  const vehiclesOutOfService = useMemo(() => new Set(openWos.map((w) => w.asset_number)).size, [openWos]);
 
-  // One row per Vestige defect; a vehicle can carry more than one, each counted once. Same rule the other dashboards use.
-  const criticalDefects = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { id: string; vehicle: string; category: string; out_of_service: boolean }[] = [];
-    (fleet ?? []).forEach((v) => (v.open_defects ?? []).forEach((d) => {
-      if (d.severity === "critical" && !seen.has(d.id)) { seen.add(d.id); out.push({ id: d.id, vehicle: v.label, category: d.category, out_of_service: d.out_of_service }); }
-    }));
-    return out;
-  }, [fleet]);
+  // Throughput: work orders this shop actually finished today, same definition as the Maintenance board's own lane.
+  const closedToday = useMemo(() => {
+    const t = easternNow();
+    const todayStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    return (wos ?? []).filter((w) => (w.status === "closed" || w.status === "cancelled") && (w.closed_at ?? w.created_at).slice(0, 10) === todayStr);
+  }, [wos]);
+
+  // Turnaround: how long a repair actually takes, open to close - a shop manager's own efficiency measure.
+  const avgRepairHours = useMemo(() => {
+    const done = (wos ?? []).filter((w) => w.status === "closed" && w.closed_at);
+    if (!done.length) return null;
+    const totalMs = done.reduce((n, w) => n + (new Date(w.closed_at as string).getTime() - new Date(w.created_at).getTime()), 0);
+    return totalMs / done.length / 3600000;
+  }, [wos]);
 
   // Faults by severity, same dedupe.
   const faultsBySeverity = useMemo(() => {
@@ -81,12 +89,12 @@ export default function ShopDashboard() {
         <StatTileRow>
           <StatTile label="Open work orders" icon={Wrench} value={wos ? openWos.length : "—"} sub="Open or in progress"
             tone={openWos.length ? "warn" : "good"} onClick={() => nav("/work-orders")} />
-          <StatTile label="Critical vehicle faults" icon={ShieldAlert} value={fleet ? criticalDefects.length : "—"} sub="Unresolved, critical severity"
-            tone={criticalDefects.length ? "bad" : "good"} onClick={() => nav("/work-orders?priority=critical")} />
+          <StatTile label="Closed Today" icon={CheckCircle2} value={wos ? closedToday.length : "—"} sub="Work orders finished today"
+            tone={closedToday.length ? "good" : undefined} onClick={() => nav("/work-orders")} />
           <StatTile label="Overdue maintenance" icon={Clock} value={wos ? overdueWos.length : "—"} sub="Past their shop window"
             tone={overdueWos.length ? "bad" : "good"} onClick={() => nav("/work-orders?overdue=1")} />
-          <StatTile label="Vehicles out of service" icon={Ban} value={o ? o.vehicles.out_of_service : "—"} sub={o ? `of ${o.vehicles.total} vehicles` : undefined}
-            tone={o?.vehicles.out_of_service ? "warn" : "good"} onClick={() => nav("/work-orders")} />
+          <StatTile label="Avg Repair Time" icon={Timer} value={avgRepairHours !== null ? `${avgRepairHours.toFixed(1)}h` : "—"} sub="Open to close, per work order"
+            tone={avgRepairHours === null ? undefined : avgRepairHours <= 24 ? "good" : "warn"} onClick={() => nav("/work-orders")} />
         </StatTileRow>
       </div>
 
@@ -94,7 +102,7 @@ export default function ShopDashboard() {
         <section className="card flex h-full flex-col p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-[15px] font-semibold">Critical maintenance alerts</h2>
-            <ViewAllButton onClick={() => nav("/work-orders?priority=critical")} />
+            <ViewAllButton onClick={() => nav("/work-orders?priority=critical&active=1")} />
           </div>
           {woErr && <div className="mt-3"><ErrorNote message={woErr} /></div>}
           {!wos ? <div className="mt-2"><Loading /></div> : (() => {
@@ -145,7 +153,7 @@ export default function ShopDashboard() {
                       </div>
                       <p className="mt-0.5 text-xs text-ink-soft">Waiting {ago(a.requested_at)}</p>
                     </div>
-                    <ReviewButton onClick={() => nav("/attention")} />
+                    <ReviewButton onClick={() => nav(`/attention?id=${a.id}`)} />
                   </div>
                 </li>
               ))}
@@ -166,7 +174,7 @@ export default function ShopDashboard() {
                     </div>
                     <div className="flex shrink-0 gap-2">
                       {w.status === "open" && <button type="button" className="btn-primary h-8 px-3 text-[12.5px]" onClick={() => act(w, "start")}>Start work</button>}
-                      {w.status === "in_progress" && <OpenButton label="Close" onClick={() => act(w, "close")} />}
+                      {w.status === "in_progress" && <button type="button" className="btn-primary h-8 px-3 text-[12.5px]" onClick={() => act(w, "close")}>Close work</button>}
                     </div>
                   </div>
                 </li>
@@ -183,11 +191,11 @@ export default function ShopDashboard() {
             {dataLoaded && (
               <div className="flex shrink-0 items-stretch gap-2.5 text-right">
                 <div className="rounded-lg bg-go-tint px-3 py-1.5">
-                  <div className="text-xl font-semibold tnum text-go">{o ? o.vehicles.total - o.vehicles.out_of_service : "—"}</div>
+                  <div className="text-xl font-semibold tnum text-go">{o ? o.vehicles.total - vehiclesOutOfService : "—"}</div>
                   <div className="text-2xs text-go">In service</div>
                 </div>
                 <div className="rounded-lg bg-stop-tint px-3 py-1.5">
-                  <div className="text-xl font-semibold tnum text-stop">{o?.vehicles.out_of_service ?? "—"}</div>
+                  <div className="text-xl font-semibold tnum text-stop">{wos ? vehiclesOutOfService : "—"}</div>
                   <div className="text-2xs text-stop">Out of service</div>
                 </div>
               </div>

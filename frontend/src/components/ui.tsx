@@ -25,10 +25,10 @@ export function Dropdown({ value, items, onChange, placeholder = "Select…", al
         <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
       </button>
       {open && items.length > 0 && (
-        <div role="listbox" className={`absolute ${align === "right" ? "right-0" : "left-0"} top-[calc(100%+6px)] z-20 max-h-72 w-[320px] max-w-[80vw] overflow-y-auto rounded-[10px] border border-rule bg-white shadow-lg`}>
+        <div role="listbox" className={`absolute ${align === "right" ? "right-0" : "left-0"} top-[calc(100%+6px)] z-20 max-h-72 w-[min(90vw,420px)] overflow-y-auto rounded-[10px] border border-rule bg-white shadow-lg`}>
           {items.map((o) => (
             <button key={o.id} type="button" role="option" aria-selected={o.id === value} onClick={() => { onChange(o.id); setOpen(false); }}
-              className={`block w-full truncate border-b border-rule-soft px-3 py-2 text-left text-[13px] last:border-b-0 hover:bg-panel ${o.id === value ? "font-semibold text-ink" : "text-ink-soft"}`}>
+              className={`block w-full whitespace-normal border-b border-rule-soft px-3 py-2 text-left text-[13px] leading-snug last:border-b-0 hover:bg-panel ${o.id === value ? "font-semibold text-ink" : "text-ink-soft"}`}>
               {o.label}
             </button>
           ))}
@@ -92,7 +92,7 @@ export function VehicleId({ label, size = "md" }: { label: string | null; size?:
 export function PageHeader({ intro, actions, badge }: { title?: string; intro?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode; badge?: ReactNode }) {
   if (!intro && !actions && !badge) return null;
   return (
-    <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
       <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
         {intro && <p className="text-ink-soft">{intro}</p>}
         {badge}

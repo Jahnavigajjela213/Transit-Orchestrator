@@ -229,7 +229,7 @@ export function StepBody({ item, editing, override, setOverride }: {
     const per = item.options?.per_run || {};
     const rows: Assignment[] = r.assignments || [];
     return (
-      <div className="overflow-x-auto rounded-lg border border-rule">
+      <div className="hscroll overflow-x-auto rounded-lg border border-rule">
         <table className="table text-xs [&_td]:whitespace-nowrap [&_td]:px-3 [&_td]:py-1.5 [&_td]:align-middle [&_th]:px-3 [&_th]:py-2">
           <thead><tr><th>Run</th><th>Starts</th><th>Riders</th><th>Spare vehicle</th><th>Driver</th><th className="text-right">Delay</th></tr></thead>
           <tbody>
@@ -313,7 +313,7 @@ function AdjustBody({ item, editing, override, setOverride }: {
         </div>
       ) : null}
       {changes.length > 0 && !editing && (
-        <div className="overflow-x-auto rounded-sm border border-rule">
+        <div className="hscroll overflow-x-auto rounded-sm border border-rule">
           <table className="table">
             <thead><tr><th>Later pickup</th><th>Scheduled</th><th>Expected now</th><th>After change</th></tr></thead>
             <tbody>{changes.slice(0, 6).map((c) => (
@@ -336,7 +336,7 @@ export function UncoveredRuns({ runs }: { runs: any[] }) {
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium leading-relaxed text-stop">No qualified spare vehicle and driver for {runs.length} run(s), {runs.reduce((n, r) => n + r.riders, 0)} booked riders. Please arrange cover by hand: call in an off-duty driver, borrow a vehicle from the other depot, or rebook the riders.</p>
-      <div className="overflow-x-auto rounded-lg border border-rule">
+      <div className="hscroll overflow-x-auto rounded-lg border border-rule">
         <table className="table text-xs [&_td]:py-2 [&_th]:py-2">
           <thead><tr><th>Run</th><th>Starts</th><th>Riders</th><th>Why it could not be covered</th></tr></thead>
           <tbody>{runs.map((r) => (
