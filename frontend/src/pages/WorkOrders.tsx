@@ -20,7 +20,7 @@ const PRIO: Record<string, string> = { critical: "bg-stop-tint text-stop", high:
 // The first lane names its contents: "Work order" for one, "Work orders" otherwise. Each heading carries a count pill in its lane's tone.
 const LANES: { key: "open" | "in_progress" | "closed"; title: (n: number) => string; dot: string; pill: string }[] = [
   { key: "open", title: (n) => (n === 1 ? "Work order" : "Work orders"), dot: "bg-signal", pill: "bg-signal text-white" },
-  { key: "in_progress", title: () => "In progress", dot: "bg-shop", pill: "bg-shop text-white" },
+  { key: "in_progress", title: () => "In progress", dot: "bg-signal", pill: "border-[1.5px] border-dashed border-signal bg-white text-signal" },
   { key: "closed", title: () => "Closed today", dot: "bg-go", pill: "bg-go text-white" },
 ];
 // The list is read from Databricks, which trails maintenance by several seconds: what the shop just did wins until it catches up.
@@ -91,7 +91,7 @@ export default function WorkOrders() {
                 <div className="flex shrink-0 items-center gap-2 px-4 pb-2.5 pt-3.5">
                   <span className={`h-2 w-2 rounded-full ${lane.dot}`} aria-hidden />
                   <h2 className="text-sm font-semibold">{lane.title(lane.cards.length)}</h2>
-                  <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tnum ${lane.pill}`}>{lane.cards.length}</span>
+                  <span className={`box-border flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-1 text-[11px] leading-none font-bold tnum ${lane.pill}`}>{lane.cards.length}</span>
                 </div>
                 <div className="flex flex-col gap-2.5 px-3 pb-3.5 md:min-h-0 md:flex-1 md:overflow-y-auto">
                   {lane.cards.length === 0 && <span className="px-1 py-2.5 text-xs text-[#9AA4AB]">Nothing here</span>}

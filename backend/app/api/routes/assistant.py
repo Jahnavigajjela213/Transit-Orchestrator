@@ -91,6 +91,23 @@ def _follow_up(question: str) -> bool:
     return not VEHICLE.search(question.upper()) and (bool(FOLLOW_UP.search(question)) or len(question.split()) <= 5)
 
 
+# Words that tie a question to one step of the vehicle-health flow, so a question about a step that has not happened yet
+# is answered as "not yet" rather than "not in the audit log".
+STEP_WORDS = [("open_work_order", r"work order|repair job|faster"), ("pull_vehicle", r"\bpull|off the road|unavailable|block"),
+              ("reassign_runs", r"driver|spare|reassign|cover|ruled out"), ("notify_riders", r"rider|notif|message|told|eta"),
+              ("return_to_service", r"return|back (in|on|to)|closed")]
+
+
+def _asked_step(question: str, steps: list[dict]) -> Optional[dict]:
+    """The step the question is about, with its number and state, when it can be told from the wording."""
+    for key, pattern in STEP_WORDS:
+        if re.search(pattern, question, re.I):
+            for i, x in enumerate(steps, 1):
+                if x.get("key") == key:
+                    return {"n": i, "label": x.get("label") or key, "status": x.get("status")}
+    return None
+
+
 @router.post("/ask")
 async def ask(body: AskIn, user: CurrentUser, s: SessionDep):
     chat = None
@@ -136,8 +153,11 @@ async def ask(body: AskIn, user: CurrentUser, s: SessionDep):
     ctx: dict = {"question": body.question, "retrieved": hits,
                  "history": [{"question": t.question, "answer": t.answer[:600]} for t in history]}
     if wf:
-        recs = (await s.execute(select(AuditRecord).where(AuditRecord.workflow_id == wf.id).order_by(AuditRecord.created_at))).scalars().all()
+        # the assistant's own earlier answers are not facts about the orchestration: leave them out of its timeline
+        recs = (await s.execute(select(AuditRecord).where(AuditRecord.workflow_id == wf.id, AuditRecord.record_type != "assistant_answer")
+                                .order_by(AuditRecord.created_at))).scalars().all()
         ctx["workflow"] = {k: v for k, v in row(wf, exclude=("context",)).items()}
+        ctx["asked_step"] = _asked_step(body.question, wf.steps or [])
         ctx["audit"] = [{"record_type": r.record_type, "step": r.step or "", "actor": r.actor, "human_action": r.human_action,
                          "outcome": r.outcome, "explanation": r.explanation, "created_at": r.created_at.isoformat()} for r in recs]
     res = await llm.run("assistant", ctx, tenant_id=user.tenant_id, workflow_id=wf.id if wf else None)
