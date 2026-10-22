@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { AlertTriangle, Check, UserCheck, Wrench, X } from "lucide-react";
+import { AlertTriangle, Bell, Check, CheckCircle2, Radar, SearchCheck, Shuffle, Truck, UserCheck, Wrench, X } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useData } from "../lib/live";
@@ -64,7 +64,7 @@ export default function WorkflowDetail() {
               <span className="text-ink-soft">Detected {ago(wf.detected_at)}{trigger ? ` from ${trigger.source}` : ""}{a?.fault?.code ? ` (${a.fault.code})` : ""}</span>
             </div>
           </div>
-          <button type="button" className="h-10 rounded-[10px] border border-rule bg-white px-3.5 text-[13px] hover:bg-panel"
+          <button type="button" className="h-10 rounded-[10px] bg-route px-3.5 text-[13px] font-semibold text-white hover:bg-route-dark"
             onClick={() => api.download(`/api/audit/export?format=jsonl&workflow_id=${wf.id}`, `audit_${wf.id}.jsonl`)}>Export audit</button>
         </div>
         <dl className="grid grid-cols-2 border-t border-rule sm:grid-cols-5">
@@ -128,9 +128,15 @@ function Fact({ label, value, last = false }: { label: string; value: string; la
   );
 }
 
+const STEP_ICON: Record<string, typeof Wrench> = {
+  detect: Radar, assess: SearchCheck, open_work_order: Wrench, pull_vehicle: Truck,
+  reassign_runs: Shuffle, notify_riders: Bell, return_to_service: CheckCircle2,
+};
+
 function Station({ s, i, steps, selected, onPick }: { s: Step; i: number; steps: Step[]; selected: boolean; onPick: () => void }) {
-  const n = i + 1;
-  const Icon = STEP_ICON[s.key] ?? Check;
+  <!--   const n = i + 1;
+  const Icon = STEP_ICON[s.key] ?? Check; -->
+  const Icon = STEP_ICON[s.key] ?? CheckCircle2;
   const done = ["done", "recommended", "shadowed", "compensated"].includes(s.status);
   const red = s.status === "escalated" || s.status === "failed";
   const now = ["awaiting_approval", "active", "waiting"].includes(s.status) || red;
@@ -143,8 +149,11 @@ function Station({ s, i, steps, selected, onPick }: { s: Step; i: number; steps:
   return (
     <li className="relative flex flex-col items-center text-center">
       {i < steps.length - 1 && <span aria-hidden className={`absolute left-1/2 top-[15px] h-[3px] w-full ${lineOn ? "bg-route" : "bg-rule"}`} />}
-      <button type="button" onClick={onPick} aria-label={`Step ${n}, ${s.label}: see its agents`} aria-pressed={selected}
-        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${dot} ${selected ? "shadow-[0_0_0_5px_rgba(11,110,105,0.2)]" : ""}`}>
+ <!--       <button type="button" onClick={onPick} aria-label={`Step ${n}, ${s.label}: see its agents`} aria-pressed={selected}
+        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${dot} ${selected ? "shadow-[0_0_0_5px_rgba(11,110,105,0.2)]" : ""}`}> -->
+
+      <button type="button" onClick={onPick} aria-label={`${s.label}: see its agents`} aria-pressed={selected}
+        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full ${dot} ${selected ? "shadow-[0_0_0_5px_rgba(11,110,105,0.2)]" : ""}`}>
         <Icon className="h-4 w-4" aria-hidden />
       </button>
       <span className={`mt-2 text-[12.5px] font-semibold ${labelTone}`}>{s.label}</span>
@@ -226,17 +235,17 @@ function ActionCard({ item, steps, onDone }: { item: Approval; steps: Step[]; on
             <button type="button" disabled={busy} onClick={() => send("acknowledge")} className="btn-lg bg-route px-[22px] font-semibold text-white hover:bg-route-dark">Acknowledge</button>
           ) : (
             <>
-              <button type="button" onClick={() => setMode(mode === "details" ? "none" : "details")} className="px-1 text-[13px] font-medium text-route hover:underline">
+              <button type="button" onClick={() => setMode(mode === "details" ? "none" : "details")} className="px-1 text-[13px] font-medium text-ink hover:underline">
                 {mode === "details" ? "Hide details" : "Details"}
               </button>
-              <button type="button" disabled={busy} onClick={() => send("reject")} className="btn-lg border border-stop-line bg-white px-4 text-stop hover:bg-stop-tint">Reject</button>
+              <button type="button" disabled={busy} onClick={() => send("reject")} className="btn-lg border border-stop-line bg-stop-tint px-4 text-stop hover:bg-stop-tint/70">Reject</button>
               {EDITABLE.includes(item.step) && (
                 <button type="button" disabled={busy} onClick={() => { if (mode === "edit") setOverride(initialOverride(item)); setMode(mode === "edit" ? "none" : "edit"); }}
                   className="btn-lg border border-rule bg-white px-4 hover:bg-panel">{mode === "edit" ? "Cancel change" : "Change"}</button>
               )}
               {mode === "edit"
-                ? <button type="button" disabled={busy} onClick={() => send("override")} className="btn-lg bg-route px-[22px] font-semibold text-white hover:bg-route-dark"><Check className="h-4 w-4" aria-hidden />Approve with changes</button>
-                : <button type="button" disabled={busy} onClick={() => send("approve")} className="btn-lg bg-route px-[22px] font-semibold text-white hover:bg-route-dark">Approve</button>}
+                ? <button type="button" disabled={busy} onClick={() => send("override")} className="btn-lg bg-signal px-[22px] font-semibold text-white hover:bg-signal/90"><Check className="h-4 w-4" aria-hidden />Approve with changes</button>
+                : <button type="button" disabled={busy} onClick={() => send("approve")} className="btn-lg bg-signal px-[22px] font-semibold text-white hover:bg-signal/90">Approve</button>}
             </>
           )
         ) : (

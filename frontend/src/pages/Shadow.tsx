@@ -171,7 +171,7 @@ export default function Shadow() {
           <Link to="/policies" className={`pill self-end px-3 py-1.5 ${inShadow ? "bg-route-tint text-route-dark" : "bg-[#EEF1F0] text-ink-soft"}`}>
             {inShadow ? "Policy is in Shadow" : "Policy is Live · turn on Shadow"}
           </Link>
-          {user?.role === "admin" && <button className="btn-lg h-9 border border-rule bg-white px-3.5 text-[13px]" onClick={measure}>Measure baseline</button>}
+          {user?.role === "admin" && <button className="btn-lg h-9 bg-go px-3.5 text-[13px] font-semibold text-white hover:bg-go/90" onClick={measure}>Measure baseline</button>}
         </>} />
 
       <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">

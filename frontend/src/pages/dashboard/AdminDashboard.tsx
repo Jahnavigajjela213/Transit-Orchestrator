@@ -74,18 +74,20 @@ export default function AdminDashboard() {
   }, [all, liveWfs, criticalDefects, governanceAudit, nav]);
 
   return (
-    <div className="dash-scroll space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
-      <StatTileRow>
-        <StatTile label="Active orchestrations" icon={GitBranch} value={wfs ? activeCount : "—"} sub="Currently running" onClick={() => nav("/workflows?status=motion")} />
-        <StatTile label="Pending approvals" icon={Bell} value={queueRaw ? all.length : "—"} sub={`Awaiting authorized review${escalations ? ` · ${escalations} manual` : ""}`}
-          tone={all.length ? "warn" : "good"} onClick={() => nav("/attention")} />
-        <StatTile label="Failed workflows" icon={XCircle} value={wfs ? failedCount : "—"} sub={`Require investigation · ${DAYS}d`}
-          tone={failedCount ? "bad" : "good"} onClick={() => nav("/workflows?status=issues")} />
-        <StatTile label="Critical vehicle faults" icon={ShieldAlert} value={fleet ? criticalDefects.length : "—"} sub="Require safety assessment"
-          tone={criticalDefects.length ? "bad" : "good"} onClick={() => nav("/work-orders?priority=critical")} />
-      </StatTileRow>
+    <div className="space-y-5 md:flex md:min-h-0 md:flex-1 md:flex-col md:space-y-0 md:gap-5 md:overflow-hidden">
+      <div className="shrink-0">
+        <StatTileRow>
+          <StatTile label="Active orchestrations" icon={GitBranch} value={wfs ? activeCount : "—"} sub="Currently running" onClick={() => nav("/workflows?status=motion")} />
+          <StatTile label="Pending approvals" icon={Bell} value={queueRaw ? all.length : "—"} sub={`Awaiting authorized review${escalations ? ` · ${escalations} manual` : ""}`}
+            tone={all.length ? "warn" : "good"} onClick={() => nav("/attention")} />
+          <StatTile label="Failed workflows" icon={XCircle} value={wfs ? failedCount : "—"} sub={`Require investigation · ${DAYS}d`}
+            tone={failedCount ? "bad" : "good"} onClick={() => nav("/workflows?status=issues")} />
+          <StatTile label="Critical vehicle faults" icon={ShieldAlert} value={fleet ? criticalDefects.length : "—"} sub="Require safety assessment"
+            tone={criticalDefects.length ? "bad" : "good"} onClick={() => nav("/work-orders?priority=critical")} />
+        </StatTileRow>
+      </div>
 
-      <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
+      <div className="grid shrink-0 grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
         <section className="card flex h-full flex-col p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-[15px] font-semibold">Priority alerts</h2>

@@ -1,4 +1,5 @@
 /** Plain SVG charts, drawn to scale, colored from the design tokens — no chart library. */
+import { useState, type ReactNode } from "react";
 
 const TOKEN: Record<string, string> = { route: "#0B6E69", signal: "#D98A00", stop: "#B42318", go: "#1F6B40", shop: "#3B4CB8" };
 
@@ -130,11 +131,11 @@ export interface Series { name: string; color: string; values: (number | null)[]
 export function MultiLineChart({ series, xLabels, yUnit = "", ariaLabel, height = 230 }: { series: Series[]; xLabels: string[]; yUnit?: string; ariaLabel: string; height?: number }) {
   const allVals = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
   if (allVals.length < 2 || xLabels.length < 2) return <p className="text-sm text-ink-soft">Not enough history yet.</p>;
-  const W = 640, H = height, P = 34;
-  const lo = Math.floor(Math.min(0, ...allVals)), hi = Math.ceil(Math.max(...allVals) * 1.1 || 1);
+  const W = 640, H = height, P = 34, topPad = 16, bottomPad = 26;
+  const ticks = niceTicks(Math.max(0, ...allVals));
+  const lo = 0, hi = ticks[ticks.length - 1];
   const x = (i: number) => P + (i * (W - 2 * P)) / (xLabels.length - 1);
-  const y = (v: number) => H - P + 6 - ((v - lo) / (hi - lo || 1)) * (H - 2 * P - 20);
-  const ticks = [lo, Math.round((lo + hi) / 2), hi];
+  const y = (v: number) => H - bottomPad - ((v - lo) / (hi - lo || 1)) * (H - topPad - bottomPad);
   const desc = series.map((s) => `${s.name}: ${s.values.map((v) => v ?? "—").join(", ")}`).join("; ");
   return (
     <div className="overflow-x-auto">
@@ -166,6 +167,74 @@ export function MultiLineChart({ series, xLabels, yUnit = "", ariaLabel, height 
   );
 }
 
+/** Round a scale's top value up to a "nice" number (1/2/5 × a power of ten, never below 1) so evenly spaced
+ *  ticks land on whole, evenly incremented numbers instead of an arbitrary fraction of the data's max. */
+function niceTicks(max: number, targetCount = 4): number[] {
+  if (max <= 0) return [0, 1];
+  const rawStep = max / targetCount;
+  const mag = Math.max(1, Math.pow(10, Math.floor(Math.log10(rawStep))));
+  const norm = rawStep / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  const hi = Math.ceil(max / step) * step;
+  const out: number[] = [];
+  for (let t = 0; t <= hi + step / 2; t += step) out.push(Math.round(t * 100) / 100);
+  return out;
+}
+
+/** One bar per category, each its own color - for a small set of independent totals read by name (the category
+ *  label under each bar), not a multi-series comparison. No legend: the x-axis label already names each bar. */
+export function CategoryBarChart({ categories, values, colors, yUnit = "", ariaLabel, tooltips }: {
+  categories: string[]; values: number[]; colors: string[]; yUnit?: string; ariaLabel: string; tooltips?: ReactNode[];
+}) {
+  const [active, setActive] = useState<number | null>(null);
+  if (categories.length === 0) return <p className="text-sm text-ink-soft">No data yet.</p>;
+  const W = 640, H = 230, P = 34, bottomP = 24;
+  const max = Math.max(1, ...values);
+  const ticks = niceTicks(max);
+  const hi = ticks[ticks.length - 1];
+  const y = (v: number) => H - bottomP - (v / hi) * (H - P - bottomP);
+  const bandW = (W - 2 * P) / categories.length;
+  const barW = Math.min(90, bandW * 0.45);
+  const desc = categories.map((c, i) => `${c}: ${values[i] ?? 0}${yUnit}`).join(", ");
+  return (
+    <div className="relative">
+      <div className="overflow-x-auto">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[420px]" role="img" aria-label={`${ariaLabel}: ${desc}`}>
+          {ticks.map((t) => <line key={t} x1={P} x2={W - P} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#D3D9DF" : "#EEF1F0"} strokeDasharray={t === 0 ? undefined : "3 3"} />)}
+          {categories.map((c, i) => {
+            const bandX = P + i * bandW;
+            const v = values[i] ?? 0;
+            const barH = Math.max(2, y(0) - y(v));
+            const hot = active === i;
+            return (
+              <g key={c}>
+                <rect x={bandX + (bandW - barW) / 2} y={y(0) - barH} width={barW} height={barH} rx={3} fill={colors[i]}
+                  fillOpacity={hot ? 1 : 0.92} stroke={hot ? "#111A20" : "none"} strokeWidth={hot ? 1.5 : 0}
+                  tabIndex={tooltips ? 0 : undefined} role={tooltips ? "button" : undefined}
+                  aria-label={`${c}: ${v}${yUnit}`} style={tooltips ? { cursor: "pointer" } : undefined}
+                  onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)}
+                  onFocus={() => setActive(i)} onBlur={() => setActive(null)} />
+                <text x={bandX + bandW / 2} y={H - 6} fontSize="10" fill="#7A8693" textAnchor="middle">{c}</text>
+              </g>
+            );
+          })}
+          {ticks.map((t) => <text key={t} x={4} y={y(t) + 4} fontSize="10" fill="#7A8693">{t}{yUnit}</text>)}
+        </svg>
+      </div>
+      {tooltips && active !== null && tooltips[active] && (
+        <div className="pointer-events-none absolute z-10 w-max max-w-[280px] rounded-[10px] border border-rule bg-white px-3 py-2 text-xs shadow-lg"
+          style={{
+            left: `${((P + active * bandW + bandW / 2) / W) * 100}%`,
+            top: `${(y(values[active] ?? 0) / H) * 100}%`,
+            transform: "translate(-50%, calc(-100% - 8px))",
+          }}>
+          {tooltips[active]}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** One bar per category, either several series side by side ("grouped") or stacked into one bar ("stacked"). */
 export function GroupedBarChart({ categories, series, mode = "grouped", yUnit = "", ariaLabel }: {
   categories: string[]; series: Series[]; mode?: "grouped" | "stacked"; yUnit?: string; ariaLabel: string;
@@ -176,7 +245,8 @@ export function GroupedBarChart({ categories, series, mode = "grouped", yUnit = 
   const max = mode === "stacked"
     ? Math.max(1, ...categories.map((_, ci) => series.reduce((n, s) => n + (s.values[ci] ?? 0), 0)))
     : Math.max(1, ...vals);
-  const hi = Math.ceil(max * 1.15);
+  const ticks = niceTicks(max);
+  const hi = ticks[ticks.length - 1];
   const y = (v: number) => H - bottomP - (v / hi) * (H - P - bottomP);
   const bandW = (W - 2 * P) / categories.length;
   const barGap = 6;
@@ -184,7 +254,7 @@ export function GroupedBarChart({ categories, series, mode = "grouped", yUnit = 
   return (
     <div className="overflow-x-auto">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[420px]" role="img" aria-label={`${ariaLabel}: ${desc}`}>
-        <line x1={P} x2={W - P} y1={y(0)} y2={y(0)} stroke="#D3D9DF" />
+        {ticks.map((t) => <line key={t} x1={P} x2={W - P} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#D3D9DF" : "#EEF1F0"} strokeDasharray={t === 0 ? undefined : "3 3"} />)}
         {categories.map((c, ci) => {
           const bandX = P + ci * bandW;
           if (mode === "stacked") {
@@ -194,7 +264,8 @@ export function GroupedBarChart({ categories, series, mode = "grouped", yUnit = 
                 {series.map((s) => {
                   const v = s.values[ci] ?? 0;
                   const barW = bandW - barGap * 2;
-                  const rect = <rect key={s.name} x={bandX + barGap} y={y(acc + v)} width={barW} height={Math.max(0, y(acc) - y(acc + v))} fill={s.color} />;
+                  const barH = v === 0 ? 0 : Math.max(2, y(acc) - y(acc + v));
+                  const rect = <rect key={s.name} x={bandX + barGap} y={y(acc) - barH} width={barW} height={barH} fill={s.color} />;
                   acc += v;
                   return rect;
                 })}
@@ -208,13 +279,16 @@ export function GroupedBarChart({ categories, series, mode = "grouped", yUnit = 
               {series.map((s, si) => {
                 const v = s.values[ci] ?? 0;
                 const bx = bandX + barGap + si * barW;
-                return <rect key={s.name} x={bx} y={y(v)} width={Math.max(0, barW - 2)} height={Math.max(0, y(0) - y(v))} fill={s.color} />;
+                // A zero value still gets a thin baseline sliver, so every category shows the same number of
+                // marks in the same place - without it, an empty slot reads as uneven spacing, not a zero.
+                const barH = Math.max(2, y(0) - y(v));
+                return <rect key={s.name} x={bx} y={y(0) - barH} width={Math.max(0, barW - 2)} height={barH} fill={s.color} />;
               })}
               <text x={bandX + bandW / 2} y={H - 6} fontSize="10" fill="#7A8693" textAnchor="middle">{c}</text>
             </g>
           );
         })}
-        {[0, Math.round(hi / 2), hi].map((t) => <text key={t} x={4} y={y(t) + 4} fontSize="10" fill="#7A8693">{t}{yUnit}</text>)}
+        {ticks.map((t) => <text key={t} x={4} y={y(t) + 4} fontSize="10" fill="#7A8693">{t}{yUnit}</text>)}
       </svg>
       <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-soft">
         {series.map((s) => <span key={s.name} className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-2 rounded-full" style={{ background: s.color }} />{s.name}</span>)}
@@ -244,12 +318,12 @@ export function DonutChart({ segments, ariaLabel, centerLabel, size = 160 }: { s
         <text x={c} y={c - 2} textAnchor="middle" fontSize="20" fontWeight={700} fill="#1C2733">{total}</text>
         <text x={c} y={c + 14} textAnchor="middle" fontSize="10" fill="#7A8693">{centerLabel ?? "total"}</text>
       </svg>
-      <ul className="flex flex-col gap-1.5 text-[12.5px]">
+      <ul className="flex flex-col gap-2.5 text-base">
         {segments.map((s) => (
-          <li key={s.label} className="flex items-center gap-2">
-            <i className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
+          <li key={s.label} className="flex items-center gap-2.5">
+            <i className="inline-block h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: s.color }} />
             <span className="text-ink-soft">{s.label}</span>
-            <span className="font-semibold tnum">{s.value}</span>
+            <span className="text-lg font-semibold tnum">{s.value}</span>
             <span className="text-ink-faint">({total ? Math.round((s.value / total) * 100) : 0}%)</span>
           </li>
         ))}

@@ -1,11 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, FlaskConical, GitBranch, UserCheck } from "lucide-react";
 import { useData } from "../../lib/live";
 import { sentence } from "../../lib/format";
 import type { ShadowRec, Workflow } from "../../lib/types";
 import { StatTile, StatTileRow } from "../../components/dashboard/DashboardShell";
-import { DonutChart, MultiLineChart, type Series } from "../../components/dashboard/charts";
+import { CategoryBarChart, DonutChart, MultiLineChart, type Series } from "../../components/dashboard/charts";
 import { STATUS, escalated, groupOf, type Group } from "../Workflows";
 
 interface EvalRunRow { id: string; status: string; score_pct: number | null; started_at: string; summary?: { cases?: number } }
@@ -16,52 +16,41 @@ const STEP_LABEL: Record<string, string> = { open_work_order: "Open work order",
 
 const TERMINAL = new Set(["completed", "completed_with_issues", "failed", "rejected", "compensated"]);
 const PERIOD_HOURS = 168;
-const COLOR = { success: "#1F6B40", failure: "#B42318", total: "#0B6E69", risk: "#D98A00" };
+const COLOR = { success: "#1F6B40", failure: "#B42318", total: "#0B6E69" };
 const fmtPct = (v: number | null) => (v === null ? "—" : `${v.toFixed(1)}%`);
 
-/** Green/amber/red by how good a rate is - the same traffic-light reading as everywhere else in the app. */
-function rateColor(pct: number): string { return pct >= 80 ? COLOR.success : pct >= 50 ? COLOR.risk : COLOR.failure; }
-
-/** The "SLA card" look: a couple of headline rates, then one short vertical bar per category - a grey track
- *  behind a colored fill, so the eye reads status from color and from height at the same time. */
-function StatusBars({ title, stats, bars }: {
-  title: string; stats: { label: string; value: string; color: string }[]; bars: { label: string; pct: number; color: string }[];
+/** The title, a couple of tinted stat badges top-right (the "In service / Out of service" look), then a bar chart. */
+function StatusBars({ title, stats, hasData, chart }: {
+  title: string; stats: { label: string; value: string; tone: "go" | "stop" }[]; hasData: boolean; chart: ReactNode;
 }) {
   return (
     <section className="card p-4">
-      <h2 className="text-[15px] font-semibold">{title}</h2>
-      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
-        {stats.map((s) => (
-          <div key={s.label}>
-            <div className="text-xs text-ink-soft">{s.label}</div>
-            <div className="text-xl font-semibold tnum" style={{ color: s.color }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-      {bars.length === 0 ? <p className="mt-4 text-sm text-ink-soft">Not enough data yet.</p> : (
-        <div className="mt-5 flex gap-4" style={{ height: 150 }} role="img" aria-label={`${title}: ${bars.map((b) => `${b.label} ${b.pct.toFixed(0)}%`).join(", ")}`}>
-          {bars.map((b) => (
-            <div key={b.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-              <div className="relative w-7 flex-1 overflow-hidden rounded-full bg-[#EEF1F0]">
-                <div className="absolute bottom-0 left-0 w-full rounded-full" style={{ height: `${Math.max(2, b.pct)}%`, background: b.color }} />
-              </div>
-              <span className="max-w-[80px] truncate text-[11px] text-ink-faint" title={b.label}>{b.label}</span>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-[15px] font-semibold">{title}</h2>
+        <div className="flex shrink-0 items-stretch gap-2.5 text-right">
+          {stats.map((s) => (
+            <div key={s.label} className={`rounded-lg px-3 py-1.5 ${s.tone === "go" ? "bg-go-tint" : "bg-stop-tint"}`}>
+              <div className={`text-xl font-semibold tnum ${s.tone === "go" ? "text-go" : "text-stop"}`}>{s.value}</div>
+              <div className={`text-2xs ${s.tone === "go" ? "text-go" : "text-stop"}`}>{s.label}</div>
             </div>
           ))}
         </div>
+      </div>
+      {!hasData ? <p className="mt-4 text-sm text-ink-soft">Not enough data yet.</p> : (
+        <div className="mt-5">{chart}</div>
       )}
     </section>
   );
 }
 
-/** One rate as its own small horizontal card: the number, then a track-and-fill bar reading the same percentage. */
+/** One rate as its own card: the number, then a track-and-fill bar reading the same percentage. */
 function RateCard({ label, pct, color }: { label: string; pct: number | null; color: string }) {
   return (
     <div className="rounded-xl border border-rule bg-[#FAFBFA] px-4 py-3.5">
       <div className="text-xs text-ink-soft">{label}</div>
       <div className="mt-1 text-xl font-semibold tnum" style={{ color }}>{fmtPct(pct)}</div>
       <div className="mt-2.5 h-2.5 overflow-hidden rounded-full bg-[#EEF1F0]">
-        <div className="h-full rounded-full" style={{ width: `${pct === null ? 0 : Math.max(2, pct)}%`, background: color }} />
+        <div className="h-full rounded-full" style={{ width: `${pct ?? 0}%`, background: color }} />
       </div>
     </div>
   );
@@ -129,7 +118,7 @@ export default function AnalystDashboard() {
 
   // ---- Chart 2: current status distribution (point-in-time, not period-scoped) ----
   const chartGroups = (["approval", "motion", "shop", "done", "issues"] as Group[]).map((g) => ({ g, label: STATUS[g][0], n: liveWfs.filter((w) => groupOf(w) === g).length }));
-  const donutColors: Record<Group, string> = { approval: "#D98A00", motion: "#0B6E69", shop: "#3B4CB8", done: "#1F6B40", issues: "#B42318" };
+  const donutColors: Record<Group, string> = { approval: "#E3A23C", motion: "#2F9E8F", shop: "#5B6EE8", done: "#7CB342", issues: "#D65A4E" };
 
   // ---- Chart 3a: AI recommendation vs what the person actually did, by step ----
   const shadowDecidedSteps = useMemo(() => (shadowSummary?.steps ?? []).filter((s) => s.matched + s.differed > 0), [shadowSummary]);
@@ -137,10 +126,24 @@ export default function AnalystDashboard() {
   const shadowDecidedTotal = shadowTotals.matched + shadowTotals.differed;
   const agreedPct = shadowDecidedTotal ? (shadowTotals.matched / shadowDecidedTotal) * 100 : null;
   const differedPct = shadowDecidedTotal ? (shadowTotals.differed / shadowDecidedTotal) * 100 : null;
-  const shadowBars = useMemo(() => shadowDecidedSteps.map((s) => {
-    const pct = (s.matched / (s.matched + s.differed)) * 100;
-    return { label: STEP_LABEL[s.step] ?? sentence(s.step), pct, color: rateColor(pct) };
-  }), [shadowDecidedSteps]);
+  // Hover detail for each bar: the same total broken down by step, so "why" is one hover away.
+  const shadowTooltips = useMemo(() => {
+    const rows = shadowDecidedSteps.map((s) => ({ label: STEP_LABEL[s.step] ?? sentence(s.step), matched: s.matched, differed: s.differed, total: s.matched + s.differed }));
+    const byStep = (key: "matched" | "differed", heading: string) => (
+      <>
+        <div className="mb-1 font-semibold text-ink">{heading} by step</div>
+        <div className="space-y-0.5">
+          {rows.map((r) => (
+            <div key={r.label} className="flex items-baseline justify-between gap-3">
+              <span className="whitespace-nowrap text-ink-soft">{r.label}</span>
+              <span className="whitespace-nowrap font-semibold tnum">{Math.round((r[key] / r.total) * 100)}%<span className="ml-1 font-normal text-ink-faint">({r[key]}/{r.total})</span></span>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+    return [byStep("matched", "Agreed"), byStep("differed", "Differed")];
+  }, [shadowDecidedSteps]);
 
   // ---- Chart 3b: success vs failure rate - two side-by-side rate cards ----
   const failureRate = successRate === null ? null : 100 - successRate;
@@ -159,16 +162,16 @@ export default function AnalystDashboard() {
       </StatTileRow>
 
       <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
-        <section className="card p-4">
+        <section className="card flex flex-col p-4">
           <h2 className="text-[15px] font-semibold">Workflow performance over time</h2>
           {!dataLoaded ? <p className="mt-3 text-sm text-ink-soft">Loading…</p> : (
-            <div className="mt-3"><MultiLineChart series={perfSeries} xLabels={bLabels} height={180} ariaLabel="Workflow performance over time" /></div>
+            <div className="mt-3 flex flex-1 flex-col justify-center"><MultiLineChart series={perfSeries} xLabels={bLabels} height={230} ariaLabel="Workflow performance over time" /></div>
           )}
         </section>
-        <section className="card p-4">
+        <section className="card flex flex-col p-4">
           <h2 className="text-[15px] font-semibold">Orchestration status distribution</h2>
-          <div className="mt-3">
-            <DonutChart centerLabel="orchestrations" ariaLabel="Current orchestration status distribution" size={130}
+          <div className="mt-3 flex flex-1 items-center">
+            <DonutChart centerLabel="orchestrations" ariaLabel="Current orchestration status distribution" size={210}
               segments={chartGroups.map((c) => ({ label: c.label, value: c.n, color: donutColors[c.g] }))} />
           </div>
         </section>
@@ -176,11 +179,13 @@ export default function AnalystDashboard() {
 
       <div className="grid grid-cols-1 gap-4 min-[1080px]:grid-cols-2">
         <StatusBars title="AI recommendation vs Shadow Mode"
-          stats={[{ label: "Agreed", value: fmtPct(agreedPct), color: COLOR.success }, { label: "Differed", value: fmtPct(differedPct), color: COLOR.failure }]}
-          bars={shadowBars} />
+          stats={[{ label: "Agreed", value: fmtPct(agreedPct), tone: "go" }, { label: "Differed", value: fmtPct(differedPct), tone: "stop" }]}
+          hasData={shadowDecidedTotal > 0}
+          chart={<CategoryBarChart categories={["Agreed", "Differed"]} values={[shadowTotals.matched, shadowTotals.differed]}
+            colors={[COLOR.success, COLOR.failure]} ariaLabel="AI recommendation vs Shadow Mode" tooltips={shadowTooltips} />} />
         <section className="card p-4">
           <h2 className="text-[15px] font-semibold">Success vs failure rate</h2>
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="mt-3 flex flex-col gap-3">
             <RateCard label="Successful" pct={successRate} color={COLOR.success} />
             <RateCard label="Not successful" pct={failureRate} color={COLOR.failure} />
           </div>
